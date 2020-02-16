@@ -21,8 +21,6 @@ package it.unibo.cvlab.pydnet;
 
 import android.content.Context;
 
-import org.tensorflow.TensorFlow;
-
 import it.unibo.cvlab.pydnet.Utils.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,10 +54,10 @@ public class ModelFactory {
         //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
         //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.
 
-//        pydnetPP.addInputNode("image", "im0");
-//        pydnetPP.addOutputNodes(Scale.HALF, "PSD/resize_images/ResizeBilinear");
-//        pydnetPP.addOutputNodes(Scale.QUARTER, "PSD/resize_images_1/ResizeBilinear");
-//        pydnetPP.addOutputNodes(Scale.HEIGHT, "PSD/resize_images_2/ResizeBilinear");
+        pydnetPP.addInputNode("image", "im0");
+        pydnetPP.addOutputNodes(Scale.HALF, "PSD/resize_images/ResizeBilinear");
+        pydnetPP.addOutputNodes(Scale.QUARTER, "PSD/resize_images_1/ResizeBilinear");
+        pydnetPP.addOutputNodes(Scale.HEIGHT, "PSD/resize_images_2/ResizeBilinear");
 
         //Il modello caricato ha una specifica risoluzione d'ingresso.
         pydnetPP.addValidResolution(Utils.Resolution.RES4);

@@ -44,14 +44,14 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
 
     //Tensorflow: per ora la GPU non è supportata.
-    implementation 'org.tensorflow:tensorflow-android:1.13.1'
+    //implementation 'org.tensorflow:tensorflow-android:1.13.1'
     implementation 'org.tensorflow:tensorflow-lite:2.1.0'
     //implementation 'org.tensorflow:tensorflow-lite-gpu:2.1.0'
 
     // ARCore library
     // Dependency version is rewritten at build time.
     implementation 'com.google.ar:core:1.15.0'
-    implementation "com.google.ar.sceneform:core:1.15.0"
+    //implementation "com.google.ar.sceneform:core:1.15.0"
 
     // Obj - a simple Wavefront OBJ file loader
     // https://github.com/javagl/Obj
@@ -63,56 +63,3 @@ dependencies {
     annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.0'
 
 }
-
-//apply plugin: 'com.google.ar.sceneform.plugin'
-//
-//sceneform.asset('sampledata/models/Earth/Earth.gltf',
-//        'default',
-//        'sampledata/models/Earth/Earth.sfa',
-//        'src/main/assets/sceneform/Earth')
-//
-//sceneform.asset('sampledata/models/Jupiter/Jupiter.gltf',
-//        'default',
-//        'sampledata/models/Jupiter/Jupiter.sfa',
-//        'src/main/assets/sceneform/Jupiter')
-//
-//sceneform.asset('sampledata/models/Luna/Luna.gltf',
-//        'default',
-//        'sampledata/models/Luna/Luna.sfa',
-//        'src/main/assets/sceneform/Luna')
-//
-//sceneform.asset('sampledata/models/Mars/Mars.gltf',
-//        'default',
-//        'sampledata/models/Mars/Mars.sfa',
-//        'src/main/assets/sceneform/Mars')
-//
-//sceneform.asset('sampledata/models/Mercury/Mercury.gltf',
-//        'default',
-//        'sampledata/models/Mercury/Mercury.sfa',
-//        'src/main/assets/sceneform/Mercury')
-//
-//sceneform.asset('sampledata/models/Neptune/Neptune.gltf',
-//        'default',
-//        'sampledata/models/Neptune/Neptune.sfa',
-//        'src/main/assets/sceneform/Neptune')
-//
-//sceneform.asset('sampledata/models/Saturn/Saturn.gltf',
-//        'default',
-//        'sampledata/models/Saturn/Saturn.sfa',
-//        'src/main/assets/sceneform/Saturn')
-//
-//sceneform.asset('sampledata/models/Sol/Sol.gltf',
-//        'default',
-//        'sampledata/models/Sol/Sol.sfa',
-//        'src/main/assets/sceneform/Sol')
-//
-//
-//sceneform.asset('sampledata/models/Uranus/Uranus.gltf',
-//        'default',
-//        'sampledata/models/Uranus/Uranus.sfa',
-//        'src/main/assets/sceneform/Uranus')
-//
-//sceneform.asset('sampledata/models/Venus/Venus.gltf',
-//        'default',
-//        'sampledata/models/Venus/Venus.sfa',
-//        'src/main/assets/sceneform/Venus')
