@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">ARPydnet</string>
+
+    <string name="default_distance">0.0 m</string>
+    <string name="distance">%1$f m</string>
+    <string name="default_message">No error</string>
+    <string name="searching_plane_message">Searching for planes…</string>
+    <string name="camera_not_available">Camera not available. Try restarting the app.</string>
+    <string name="toggleDepth">Depth Mask</string>
+    <string name="toggle_depth_color">Depth Color</string>
+    <string name="toggle_mask">Mask</string>
+    <string name="reset">Reset</string>
+    <string name="quantizeMask">Quantize Mask</string>
+
+    <string name="plane_finding">Searching for surfaces&#8230;</string>
+
+    <string name="no_log_message">No log</string>
+    <string name="log_general">SF: %1$f. Punti nello schermo: %2$d. Distanze punti (min,max): (%3$f,%4$f) m</string>
+
+</resources>

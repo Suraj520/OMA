@@ -1,0 +1,26 @@
+Per convertire un dataset json in png:
+python points2png.py datasetPointsPath conversionMethod pointRadius R G B A
+datasetPointsPath: path assoluto alla cartella che contiene i .json
+conversionMethod: 1,2,3
+1) Float IEEE-754 -> RGBA
+2) Float IEEE-754 -> int[0,255] -> RGBA
+3) Float IEEE-754 -> int[0,255] -> plasma -> RGBA
+Il primo metodo prende il float in formato IEEE-754 e lo spalma nei quattro canali RGBA del pixel.
+Il secondo effettua una normalizzazione [0,255] e imposta il pixel RGB come scala di grigi
+Il terzo metodo effettua una conversione "plasma" per ogni pixel, dopo una normalizzazione dei punti
+pointRadius: indica il raggio che ogni punto deve avere in pixel.
+RGBA: indica il color di background che la mappa deve avere. Ogni campo deve avere un range [0,255]
+
+Per convertire un dataset json in oggetto python:
+python -i points2png.py pointsPath
+pointsPath: path assoluto al singolo file .json
+
+Oppure con il seguente scriptino da includere:
+
+import json
+from PointCloudDataset import *
+with open(path) as json_file:
+	data = json.load(json_file)
+	dataset = PointCloudDataset.fromJSON(data)
+	
+PointCloudDataset.py contiene la documentazione sul dataset JSON generato.

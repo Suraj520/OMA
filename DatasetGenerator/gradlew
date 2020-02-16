@@ -1,0 +1,135 @@
+package it.unibo.arpydnet;
+
+import android.graphics.Bitmap;
+import android.media.Image;
+import android.opengl.GLES20;
+import android.opengl.GLSurfaceView;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.TextView;
+import android.widget.Toast;
+import android.widget.ToggleButton;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.ar.core.Anchor;
+import com.google.ar.core.ArCoreApk;
+import com.google.ar.core.Camera;
+import com.google.ar.core.Config;
+import com.google.ar.core.Frame;
+import com.google.ar.core.HitResult;
+import com.google.ar.core.Plane;
+import com.google.ar.core.Point;
+import com.google.ar.core.PointCloud;
+import com.google.ar.core.Pose;
+import com.google.ar.core.Session;
+import com.google.ar.core.Trackable;
+import com.google.ar.core.TrackingState;
+import com.google.ar.core.examples.java.common.helpers.PermissionsHelper;
+import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
+import com.google.ar.core.examples.java.common.helpers.FullScreenHelper;
+import com.google.ar.core.examples.java.common.helpers.TapHelper;
+import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
+import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
+import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
+import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
+import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
+import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.UnavailableApkTooOldException;
+import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
+import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
+import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
+import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
+
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+import it.unibo.cvlab.pydnet.ColorMapper;
+import it.unibo.cvlab.pydnet.ImageUtils;
+import it.unibo.cvlab.pydnet.Model;
+import it.unibo.cvlab.pydnet.ModelFactory;
+import it.unibo.cvlab.pydnet.Utils;
+
+//Inspirata da:
+//https://github.com/FilippoAleotti/mobilePydnet/
+//https://github.com/google-ar/arcore-android-sdk/tree/master/samples/hello_ar_java
+
+
+public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Renderer {
+
+    private static final String TAG = ARPydnet.class.getSimpleName();
+
+    @BindView(R.id.surfaceView)
+    GLSurfaceView mySurfaceView;
+
+    @BindView(R.id.distanceTextView)
+    TextView distanceTextView;
+
+    @BindView(R.id.logTextView)
+    TextView logTextView;
+
+    @BindView(R.id.toggleDepthMask)
+    ToggleButton toggleDepthMask;
+
+    @OnClick(R.id.toggleDepthMask)
+    public void onToggleDepthMaskClick(View view){
+        depthMaskOn = !depthMaskOn;
+    }
+
+    private Unbinder unbinder;
+
+    private boolean installRequested;
+    private Session session;
+
+    //Helper vari
+    private DisplayRotationHelper displayRotationHelper;
+    private final TrackingStateHelper trackingStateHelper = new TrackingStateHelper(this);
+    private TapHelper tapHelper;//Usato per gestire il tocco dell'utente
+
+    //Usati per il rendering degli oggetti virtuali:
+    //Usano direttamente opengl
+    private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
+    private final ObjectRenderer virtualObject = new ObjectRenderer();
+    private final ObjectRenderer virtualObjectShadow = new ObjectRenderer();
+    private final PlaneRenderer planeRenderer = new PlaneRenderer();
+    private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
+
+    //Ricavo il numero di thread massimi.
+    private static int NUMBER_THREADS = Runtime.getRuntime().availableProcessors();
+
+    //Oggetti per la pydnet
+    private ModelFactory modelFactory;
+    private Model currentModel;
+    private FloatBuffer inference;
+
+    //Usato per far girare pydnet in un altro thread.
+    private Handler inferenceHandler;
+    private HandlerThread inferenceHandlerThread;
+
+    //Usato per indicare che la rete neurale sta effettuando una conversione.
+    private volatile boolean isProcessingFrame = false;
+
+    //Qui parametri fissi della pydnet: dipendono dal modello caricato.
+    private static Utils.Resolution RESOLUTION = Utils.Resolution.RES4;
+    private static Utils.Scale SCALE = Utils.Scale.HALF;
+    private static float MAPPER_SCALE_FACTOR =  0.2f;
+    private static float COLOR_SCALE_FACTOR =  10.5f;
+
+    //Oggetti per la distanza virtuale
+    private static float DISTANCE_FACTOR = 1.0f;    //Fattore di conversione per la distanza tra

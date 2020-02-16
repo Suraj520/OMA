@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Dataset Generator</string>
+
+    <string name="toggle_record">Registra</string>
+    <string name="showSetNumPointDialog">Imposta numero punti</string>
+
+    <string name="default_message">No error</string>
+    <string name="searching_plane_message">Searching for planes…</string>
+    <string name="camera_not_available">Camera not available. Try restarting the app.</string>
+
+    <string name="dataset_path">dataset/</string>
+    <string name="images_path">/images/</string>
+    <string name="points_path">/points/</string>
+
+    <string name="dialog_message">Imposta il numero minimo di punti</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Annulla</string>
+    <string name="dialog_set_num_point_failed">Inserisci un numero positivo</string>
+
+    <string name="log_default_message">No log</string>
+    <string name="log_numPoints">Punti nello schermo: %1$d, minimo: %2$d</string>
+
+</resources>
