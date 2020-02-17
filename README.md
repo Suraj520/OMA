@@ -47,7 +47,7 @@ You can set a threshold value to trigger the saving of a new frame.
 
 * **Luca Bartolomei** - *Initial work* - [bartn8](https://github.com/bartn8)
 
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
+See also the list of [contributors](https://github.com/FilippoAleotti/OMA/graphs/contributors) who participated in this project.
 
 ## License
 
