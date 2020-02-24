@@ -14,6 +14,7 @@
  */
 package com.google.ar.core.examples.java.common.helpers;
 
+
 import android.app.Activity;
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;
@@ -26,6 +27,8 @@ import android.view.Surface;
 import android.view.WindowManager;
 import com.google.ar.core.Session;
 
+import it.unibo.cvlab.pydnet.demo.Size;
+
 /**
  * Helper to track the display rotations. In particular, the 180 degree rotations are not notified
  * by the onSurfaceChanged() callback, and thus they require listening to the android display
@@ -33,8 +36,7 @@ import com.google.ar.core.Session;
  */
 public final class DisplayRotationHelper implements DisplayListener {
     private boolean viewportChanged;
-    private int viewportWidth;
-    private int viewportHeight;
+    private Size viewportSize;
     private final Display display;
     private final DisplayManager displayManager;
     private final CameraManager cameraManager;
@@ -57,12 +59,12 @@ public final class DisplayRotationHelper implements DisplayListener {
         display = windowManager.getDefaultDisplay();
     }
 
-    /** Registers the display listener. Should be called from {@link Activity#onResume()}. */
+    /** Registers the display listener. */
     public void onResume() {
         displayManager.registerDisplayListener(this, null);
     }
 
-    /** Unregisters the display listener. Should be called from {@link Activity#onPause()}. */
+    /** Unregisters the display listener. */
     public void onPause() {
         displayManager.unregisterDisplayListener(this);
     }
@@ -73,18 +75,16 @@ public final class DisplayRotationHelper implements DisplayListener {
      * android.opengl.GLSurfaceView.Renderer
      * #onSurfaceChanged(javax.microedition.khronos.opengles.GL10, int, int)}.
      *
-     * @param width the updated width of the surface.
-     * @param height the updated height of the surface.
+     * @param viewportSize the updated size of the surface.
      */
-    public void onSurfaceChanged(int width, int height) {
-        viewportWidth = width;
-        viewportHeight = height;
+    public void onSurfaceChanged(Size viewportSize) {
+        this.viewportSize = viewportSize;
         viewportChanged = true;
     }
 
     /**
      * Updates the session display geometry if a change was posted either by {@link
-     * #onSurfaceChanged(int, int)} call or by {@link #onDisplayChanged(int)} system callback. This
+     * #onSurfaceChanged(Size)} call or by {@link #onDisplayChanged(int)} system callback. This
      * function should be called explicitly before each call to {@link Session#update()}. This
      * function will also clear the 'pending update' (viewportChanged) flag.
      *
@@ -93,7 +93,7 @@ public final class DisplayRotationHelper implements DisplayListener {
     public void updateSessionIfNeeded(Session session) {
         if (viewportChanged) {
             displayRotation = display.getRotation();
-            session.setDisplayGeometry(displayRotation, viewportWidth, viewportHeight);
+            session.setDisplayGeometry(displayRotation, viewportSize.width, viewportSize.height);
             viewportChanged = false;
         }
     }
@@ -103,21 +103,8 @@ public final class DisplayRotationHelper implements DisplayListener {
      *  relative to the device camera sensor orientation.
      */
     public float getCameraSensorRelativeViewportAspectRatio(String cameraId) {
-        float aspectRatio;
         int cameraSensorToDisplayRotation = getCameraSensorToDisplayRotation(cameraId);
-        switch (cameraSensorToDisplayRotation) {
-            case 90:
-            case 270:
-                aspectRatio = (float) viewportHeight / (float) viewportWidth;
-                break;
-            case 0:
-            case 180:
-                aspectRatio = (float) viewportWidth / (float) viewportHeight;
-                break;
-            default:
-                throw new RuntimeException("Unhandled rotation: " + cameraSensorToDisplayRotation);
-        }
-        return aspectRatio;
+        return viewportSize.aspectRatio(cameraSensorToDisplayRotation);
     }
 
     /**

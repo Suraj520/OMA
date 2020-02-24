@@ -64,11 +64,8 @@ public class Calibrator {
         this.displayRotation = displayRotation;
     }
 
-    public void setSurfaceWidth(int surfaceWidth) {
+    public void setResolution(int surfaceWidth, int surfaceHeight){
         this.surfaceWidth = surfaceWidth;
-    }
-
-    public void setSurfaceHeight(int surfaceHeight) {
         this.surfaceHeight = surfaceHeight;
     }
 
@@ -420,7 +417,7 @@ public class Calibrator {
         //Devo verificare che ci sia il minimo di punti per la somma.
         if(i > 0){
             float tmpScaleFactor = sumScaleFactor / sumWeight;
-            Log.d(TAG, "Calculated pydnet scale factor: "+tmpScaleFactor);
+//            Log.d(TAG, "Calculated pydnet scale factor: "+tmpScaleFactor);
 //            Log.d(TAG, "Distance (min, max): "+minDistance+", "+maxDistance);
 //            Log.d(TAG, "Predicted distance (min, max): "+minPredictedDistance+", "+maxPredictedDistance);
 //            Log.d(TAG, "Scaled predicted distance (min, max): "+minPredictedDistance*scaleFactor+", "+maxPredictedDistance*scaleFactor);

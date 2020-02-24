@@ -5,17 +5,16 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:id="@+id/container"
+
     tools:context=".ARPydnet">
 
-    <android.opengl.GLSurfaceView
-        android:id="@+id/surfaceView"
-        android:name="com.google.ar.core.examples.java.helloar.MyGLSurfaceView"
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentStart="true"
-        android:layout_alignParentEnd="true"
         android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true" />
 
     <androidx.appcompat.widget.Toolbar

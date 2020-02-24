@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
 import it.unibo.cvlab.pydnet.Utils;
 
@@ -48,7 +49,7 @@ public class BackgroundRenderer {
 
     private static final int COORDS_PER_VERTEX = 2;
     private static final int TEXCOORDS_PER_VERTEX = 2;
-    private static final int FLOAT_SIZE = 4;
+    private static final int FLOAT_SIZE = Float.BYTES;
 
     private static final float[] QUAD_COORDS =
             new float[] {
@@ -67,15 +68,13 @@ public class BackgroundRenderer {
             };
 
     private static final int VERTEX_COUNT = QUAD_COORDS.length / COORDS_PER_VERTEX;
-//    private static final int VERTEX_STRIDE = COORDS_PER_VERTEX * 4; // 4 bytes per vertex
 
     private FloatBuffer backgroundCoordsBuffer;
-    private FloatBuffer clipBackgroundCoordsBuffer;
     private FloatBuffer backgroundTexCoordsBuffer;
     private FloatBuffer maskTexCoordsBuffer;
 
     //Riferimento al programma shader
-    private int backgroundProgram;
+    private int program;
 
     //Riferimenti ai Sampler
     private int backgroundTextureUniform;
@@ -93,7 +92,7 @@ public class BackgroundRenderer {
     //Riferimento alle coordinate delle texture.
     private int maskTexCoordAttribute;
 
-    private int[] textures = new int[2];
+    private int[] textures = new int[3];
 
     public int getDepthColorTextureId(){
         return textures[0];
@@ -101,6 +100,10 @@ public class BackgroundRenderer {
 
     public int getBackgroundTextureId() {
         return textures[1];
+    }
+
+    private int getColorFrameBufferTextureId(){
+        return textures[2];
     }
 
     private boolean depthColorEnabled = false;
@@ -111,6 +114,36 @@ public class BackgroundRenderer {
 
     public void setDepthColorEnabled(boolean depthColorEnabled) {
         this.depthColorEnabled = depthColorEnabled;
+    }
+
+    private IntBuffer frameBuffer = IntBuffer.allocate(1);
+
+    //Dati aggiuntivi per fare lo screenshot
+    private int surfaceWidth, surfaceHeight;
+    private int[] pixelData;
+    private IntBuffer pixelDataBuffer;
+    private int[] bitmapData;
+
+    public void updateBuffers(int surfaceWidth, int surfaceHeight){
+        this.surfaceWidth = surfaceWidth;
+        this.surfaceHeight = surfaceHeight;
+        pixelData = new int[surfaceWidth * surfaceHeight];
+        pixelDataBuffer = IntBuffer.wrap(pixelData);
+        bitmapData = new int[surfaceWidth * surfaceHeight];
+
+        //Devo aggiornare anche la texture associata al framebuffer
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+
+        int textureTarget = GLES20.GL_TEXTURE_2D;
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(textureTarget, getColorFrameBufferTextureId());
+
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, surfaceWidth, surfaceHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+
+        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
     }
 
     /**
@@ -138,7 +171,7 @@ public class BackgroundRenderer {
 
         textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
 
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(textureTarget, getBackgroundTextureId());
 
         GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
@@ -150,6 +183,34 @@ public class BackgroundRenderer {
         GLES20.glBindTexture(textureTarget, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
+
+        //Creazione del framebuffer per il rendering alternativo alla finestra.
+        //Ho bisogno anche di una texture aggiuntiva dove salvare il rendering
+        GLES20.glGenFramebuffers(1, frameBuffer);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+
+        //Associazione strana con la texture che non ho capito.
+        textureTarget = GLES20.GL_TEXTURE_2D;
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(textureTarget, getColorFrameBufferTextureId());
+
+        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, getColorFrameBufferTextureId(), 0);
+
+        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+
+        if (GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) == GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            Log.d(TAG, "Framebuffer caricato correttamente");
+        }
+
+        ShaderUtil.checkGLError(TAG, "Framebuffer loading");
 
         int numVertices = 4;
 
@@ -163,13 +224,6 @@ public class BackgroundRenderer {
         backgroundCoordsBuffer = bbCoords.asFloatBuffer();
         backgroundCoordsBuffer.put(QUAD_COORDS);
         backgroundCoordsBuffer.position(0);
-
-        ByteBuffer bbCoords2 = ByteBuffer.allocateDirect(QUAD_COORDS.length * FLOAT_SIZE);
-        bbCoords.order(ByteOrder.nativeOrder());
-
-        clipBackgroundCoordsBuffer = bbCoords2.asFloatBuffer();
-        clipBackgroundCoordsBuffer.put(QUAD_COORDS);
-        clipBackgroundCoordsBuffer.position(0);
 
         ByteBuffer bbTexCoordsTransformed =
                 ByteBuffer.allocateDirect(numVertices * TEXCOORDS_PER_VERTEX * FLOAT_SIZE);
@@ -194,26 +248,26 @@ public class BackgroundRenderer {
                 ShaderUtil.loadGLShader(TAG, context, GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
 
         // create empty OpenGL ES Program
-        backgroundProgram = GLES20.glCreateProgram();
+        program = GLES20.glCreateProgram();
 
         // add the vertex shader to program
-        GLES20.glAttachShader(backgroundProgram, vertexShader);
+        GLES20.glAttachShader(program, vertexShader);
         // add the fragment shader to program
-        GLES20.glAttachShader(backgroundProgram, fragmentShader);
+        GLES20.glAttachShader(program, fragmentShader);
         // creates OpenGL ES program executables
-        GLES20.glLinkProgram(backgroundProgram);
+        GLES20.glLinkProgram(program);
 
         ShaderUtil.checkGLError(TAG, "Program creation");
 
-        GLES20.glUseProgram(backgroundProgram);
+        GLES20.glUseProgram(program);
 
-        backgroundPositionAttribute = GLES20.glGetAttribLocation(backgroundProgram, "a_position");
-        backgroundTexCoordAttribute = GLES20.glGetAttribLocation(backgroundProgram, "a_backgroundTextCoord");
-        maskTexCoordAttribute = GLES20.glGetAttribLocation(backgroundProgram, "a_maskTextCoord");
+        backgroundPositionAttribute = GLES20.glGetAttribLocation(program, "a_position");
+        backgroundTexCoordAttribute = GLES20.glGetAttribLocation(program, "a_backgroundTextCoord");
+        maskTexCoordAttribute = GLES20.glGetAttribLocation(program, "a_maskTextCoord");
 
-        depthColorEnabledUniform = GLES20.glGetUniformLocation(backgroundProgram, "u_depthColorEnabled");
-        backgroundTextureUniform = GLES20.glGetUniformLocation(backgroundProgram, "u_backgroundTexture");
-        depthColorTextureUniform = GLES20.glGetUniformLocation(backgroundProgram, "u_depthColorTexture");
+        depthColorEnabledUniform = GLES20.glGetUniformLocation(program, "u_depthColorEnabled");
+        backgroundTextureUniform = GLES20.glGetUniformLocation(program, "u_backgroundTexture");
+        depthColorTextureUniform = GLES20.glGetUniformLocation(program, "u_depthColorTexture");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
@@ -254,56 +308,6 @@ public class BackgroundRenderer {
     }
 
     /**
-     * Draws the camera image using the currently configured {@link BackgroundRenderer#backgroundTexCoordsBuffer}
-     * image texture coordinates.
-     *
-     * <p>The image will be center cropped if the camera sensor aspect ratio does not match the screen
-     * aspect ratio, which matches the cropping behavior of {@link
-     * Frame#transformCoordinates2d(Coordinates2d, float[], Coordinates2d, float[])}.
-     */
-    public void draw(
-            int imageWidth, int imageHeight, float screenAspectRatio, int cameraToDisplayRotation) {
-        // Crop the camera image to fit the screen aspect ratio.
-        float imageAspectRatio = (float) imageWidth / imageHeight;
-        float croppedWidth;
-        float croppedHeight;
-        if (screenAspectRatio < imageAspectRatio) {
-            croppedWidth = imageHeight * screenAspectRatio;
-            croppedHeight = imageHeight;
-        } else {
-            croppedWidth = imageWidth;
-            croppedHeight = imageWidth / screenAspectRatio;
-        }
-
-        float u = (imageWidth - croppedWidth) / imageWidth * 0.5f;
-        float v = (imageHeight - croppedHeight) / imageHeight * 0.5f;
-
-        float[] texCoordTransformed;
-        switch (cameraToDisplayRotation) {
-            case 90:
-                texCoordTransformed = new float[] {1 - u, 1 - v, u, 1 - v, 1 - u, v, u, v};
-                break;
-            case 180:
-                texCoordTransformed = new float[] {1 - u, v, 1 - u, 1 - v, u, v, u, 1 - v};
-                break;
-            case 270:
-                texCoordTransformed = new float[] {u, v, 1 - u, v, u, 1 - v, 1 - u, 1 - v};
-                break;
-            case 0:
-                texCoordTransformed = new float[] {u, 1 - v, u, v, 1 - u, 1 - v, 1 - u, v};
-                break;
-            default:
-                throw new IllegalArgumentException("Unhandled rotation: " + cameraToDisplayRotation);
-        }
-
-        // Write image texture coordinates.
-        backgroundTexCoordsBuffer.position(0);
-        backgroundTexCoordsBuffer.put(texCoordTransformed);
-
-        draw();
-    }
-
-    /**
      * Draws the camera background image using the currently configured {@link
      * BackgroundRenderer#backgroundTexCoordsBuffer} image texture coordinates.
      */
@@ -317,19 +321,16 @@ public class BackgroundRenderer {
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glDepthMask(false);
 
-        GLES20.glUseProgram(backgroundProgram);
-
-        //Binding del coefficiente:
-        GLES20.glUniform1f(depthColorEnabledUniform, depthColorEnabled ? 1.0f : 0.0f);
+        GLES20.glUseProgram(program);
 
         //Binding delle texture
         GLES20.glUniform1i(depthColorTextureUniform, 0);
-        GLES20.glUniform1i(backgroundTextureUniform,  1);
+        GLES20.glUniform1i(backgroundTextureUniform,  2);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getDepthColorTextureId());
 
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
 
         // Set the vertex positions.
@@ -362,6 +363,19 @@ public class BackgroundRenderer {
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
         GLES20.glEnableVertexAttribArray(maskTexCoordAttribute);
 
+        //Binding del coefficiente: Devo farlo falso per evitare colorazioni nel framebuffer.
+        GLES20.glUniform1f(depthColorEnabledUniform, 0.0f);
+
+        //Disegno nel framebuffer
+        //https://stackoverflow.com/questions/4041682/android-opengl-es-framebuffer-objects-rendering-depth-buffer-to-texture
+        //https://github.com/google-ar/sceneform-android-sdk/issues/225
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
+
+        //Binding del coefficiente:
+        GLES20.glUniform1f(depthColorEnabledUniform, depthColorEnabled ? 1.0f : 0.0f);
+
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
 
         // Disable vertex arrays
@@ -376,25 +390,16 @@ public class BackgroundRenderer {
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw");
     }
 
-//    public void loadBackgroundImage(Bitmap image){
-//        loadMask(image, 0, getBackgroundTextureId(), GLES20.GL_TEXTURE1);
-//    }
+    public void loadBackgroundImage(Bitmap image){
+        loadImage(image, 0, getBackgroundTextureId(), GLES20.GL_TEXTURE2, GLES11Ext.GL_TEXTURE_EXTERNAL_OES);
+    }
 
     /**
      * Carica l'immagine di depth. Non libera la risorsa bitmap.
      * @param image bitmap con l'informazione della depth.
      */
     public void loadDepthColorImage(Bitmap image){
-        loadDepthColorImage(image, 0);
-    }
-
-    /**
-     * Carica l'immagine di depth. Non libera la risorsa bitmap.
-     * @param image bitmap con l'informazione della depth.
-     * @param rotation rotazione da imprimere: 0 di default.
-     */
-    private void loadDepthColorImage(Bitmap image, int rotation){
-        loadMask(image, rotation, getDepthColorTextureId(), GLES20.GL_TEXTURE0);
+        loadImage(image, 0, getDepthColorTextureId(), GLES20.GL_TEXTURE0, GLES20.GL_TEXTURE_2D);
     }
 
     /**
@@ -405,7 +410,7 @@ public class BackgroundRenderer {
      * @param textureId bind della texture openGL
      * @param activeTexture bind della texture attiva openGL
      */
-    private void loadMask(Bitmap image, int rotation, int textureId, int activeTexture){
+    private void loadImage(Bitmap image, int rotation, int textureId, int activeTexture, int textureTarget){
         Bitmap flipped = image;
 
         //https://stackoverflow.com/questions/4518689/texture-coordinates-in-opengl-android-showing-image-reversed
@@ -414,8 +419,6 @@ public class BackgroundRenderer {
             flip.postRotate(rotation);
             flipped = Bitmap.createBitmap(image, 0, 0, image.getWidth(), image.getHeight(), flip, true);
         }
-
-        int textureTarget = GLES20.GL_TEXTURE_2D;
 
         GLES20.glActiveTexture(activeTexture);
         GLES20.glBindTexture(textureTarget, textureId);
@@ -430,46 +433,53 @@ public class BackgroundRenderer {
             flipped.recycle();
     }
 
-    public void clipBackgroundTexture(int cameraWidth, int cameraHeight, Utils.Resolution res){
-        float dx = 0.0f;
-        float dy = 0.0f;
+    /**
+     * Effettua uno "screenshot" della camera, senza effetti depth.
+     * @param resolution risoluzione screenshotì
+     * @return Bitmap rgba con lo screenshot
+     */
+    public Bitmap screenshot(Utils.Resolution resolution){
+        return  screenshot(resolution.getWidth(), resolution.getHeight());
+    }
 
-        if(cameraWidth >= res.getWidth()){
-            dx = (float)cameraWidth / res.getWidth();
-            dx -=1.0f;
-        }else{
-            Log.d(TAG, "Width pydnet > camera width");
+    /**
+     * Effettua uno "screenshot" della camera, senza effetti depth.
+     * @param width larghezza screenshot
+     * @param height altezza screenshot
+     * @return Bitmap rgba con lo screenshot
+     */
+    public Bitmap screenshot(int width, int height){
+        //Set frame buffer
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+
+        // Read the pixels from framebuffer.
+        pixelDataBuffer.position(0);
+        GLES20.glReadPixels(0, 0, surfaceWidth, surfaceHeight,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelDataBuffer);
+
+        //Return to screen frame.
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+
+        // Convert the pixel data from RGBA to what Android wants, ARGB.
+        for (int i = 0; i < surfaceHeight; i++) {
+            for (int j = 0; j < surfaceWidth; j++) {
+                int p = pixelData[i * surfaceWidth + j];
+                int b = (p & 0x00ff0000) >> 16;
+                int r = (p & 0x000000ff) << 16;
+                int ga = p & 0xff00ff00;
+                bitmapData[(surfaceHeight - i - 1) * surfaceWidth + j] = ga | r | b;
+            }
         }
 
-        if(cameraHeight >= res.getHeight()){
-            dy = (float)cameraHeight / res.getHeight();
-            dy -=1.0f;
-        }else{
-            Log.d(TAG, "Height pydnet > camera height");
-        }
+        // Create a bitmap.
+        Bitmap bitmap = Bitmap.createBitmap(bitmapData,
+                surfaceWidth, surfaceHeight, Bitmap.Config.ARGB_8888);
 
-        backgroundCoordsBuffer.rewind();
+        Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, false);
 
-        int remaining = backgroundCoordsBuffer.remaining();
+        bitmap.recycle();
 
-        float[] array = new float[remaining];
-        for(int i = 0; i < array.length && backgroundCoordsBuffer.hasRemaining(); i++) array[i] = backgroundCoordsBuffer.get();
-
-
-//        -1.0f, -1.0f,   //Bottom left
-//        -1.0f, +1.0f,   //Top left
-//        +1.0f, -1.0f,   //Bottom right
-//        +1.0f, +1.0f,   //Top Right
-
-        array[0] += dx;//Bottom left
-        array[1] += dy;//Bottom left
-        array[2] += dx;//Top left
-        array[5] += dy;//Bottom right
-
-        backgroundCoordsBuffer.rewind();
-        clipBackgroundCoordsBuffer.rewind();
-        clipBackgroundCoordsBuffer.put(array);
-        clipBackgroundCoordsBuffer.rewind();
+        return scaledBitmap;
     }
 
 }

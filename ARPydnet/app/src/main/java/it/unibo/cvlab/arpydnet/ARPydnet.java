@@ -17,12 +17,14 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentContainerView;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.snackbar.Snackbar;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
-import com.google.ar.core.CameraConfig;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
@@ -43,7 +45,6 @@ import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
 import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
-import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
@@ -66,6 +67,7 @@ import it.unibo.cvlab.pydnet.ImageUtils;
 import it.unibo.cvlab.pydnet.Model;
 import it.unibo.cvlab.pydnet.ModelFactory;
 import it.unibo.cvlab.pydnet.Utils;
+import it.unibo.cvlab.pydnet.demo.Size;
 
 //Inspirata da:
 //https://github.com/FilippoAleotti/mobilePydnet/
@@ -77,10 +79,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private static final String TAG = ARPydnet.class.getSimpleName();
 
     public static final float NEAR_PLANE = 0.2f;
-    public static final float FAR_PLANE = 6.0f;
+    public static final float FAR_PLANE = 5.0f;
 
-    @BindView(R.id.surfaceView)
-    GLSurfaceView mySurfaceView;
+    @BindView(R.id.container)
+    FragmentContainerView fragmentContainerView;
 
     @BindView(R.id.optionsToolbar)
     Toolbar optionsToolbar;
@@ -95,6 +97,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean installRequested;
     private Session session;
 
+    //Fragments
+    private Fragment currentFragment;
+    private ARSingleFragment singleFragment;
+    private ARDualFragment dualFragment;
+
     //Helper vari
     private DisplayRotationHelper displayRotationHelper;
     private final TrackingStateHelper trackingStateHelper = new TrackingStateHelper(this);
@@ -107,6 +114,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private final ObjectRenderer virtualObjectShadow = new ObjectRenderer();
     private final PlaneRenderer planeRenderer = new PlaneRenderer();
     private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
+    private final PointerRenderer pointerRenderer = new PointerRenderer();
 
     //Ricavo il numero di thread massimi.
     private static int NUMBER_THREADS = Runtime.getRuntime().availableProcessors();
@@ -132,6 +140,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     //Oggetti usati per l'unione della Pydnet e ARCore
     //Immagine dalla camera: usata per la maschera e per la pydnet.
     Image cameraImage = null;
+    private int surfaceWidth, surfaceHeight;
 
     //Usato per calibrare le maschere degli oggetti.
     private Calibrator calibrator = null;
@@ -141,6 +150,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean depthColorEnabled = false;
     private boolean maskEnabled = false;
     private boolean quantizedMaskEnabled = false;
+    private boolean pointerMode = false;
+    private boolean dualScreenMode = false;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
@@ -167,84 +178,117 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         //Binding tra XML e Java tramite ButterKnife
         unbinder = ButterKnife.bind(this);
 
+        //Posso attivare il depth color solo se sto in single mode.
+        depthColorEnabled = !dualScreenMode && depthColorEnabled;
+
+        //Helpers
+        displayRotationHelper = new DisplayRotationHelper(/*context=*/ this);
+        // Set up tap listener.
+        tapHelper = new TapHelper(this);
+
+        //Fragments
+        singleFragment = new ARSingleFragment(this, tapHelper);
+        dualFragment = new ARDualFragment(this, tapHelper);
+        currentFragment = dualScreenMode ? dualFragment : singleFragment;
+
+        FragmentTransaction fragTransaction = getSupportFragmentManager().beginTransaction();
+        fragTransaction.add(R.id.container, currentFragment);
+        fragTransaction.commit();
+
         //Layout etc
 
         Menu optionsMenu = optionsToolbar.getMenu();
         optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
         optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
         optionsMenu.findItem(R.id.toggle_quantize).setIcon(quantizedMaskEnabled ? R.drawable.ic_quantize : R.drawable.ic_quantize_off);
+        optionsMenu.findItem(R.id.toggle_pointer).setIcon(pointerMode ? R.drawable.ic_pointer : R.drawable.ic_pointer_off);
+        optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
 
+        //Attivo il depth solo se non siamo in dual mode.
+//        optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
 
         optionsToolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.toggle_depth_color) {
-                depthColorEnabled = !depthColorEnabled;
-                item.setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
 
-                return true;
-            }
+            switch (item.getItemId()) {
+                case R.id.toggle_depth_color:
+                    depthColorEnabled = !depthColorEnabled;
+                    item.setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
+                    return true;
 
-            if (item.getItemId() == R.id.toggle_mask) {
-                maskEnabled = !maskEnabled;
-                item.setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
+                case R.id.toggle_mask:
+                    maskEnabled = !maskEnabled;
+                    item.setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
+                    return true;
 
-                return true;
-            }
+                case R.id.toggle_quantize:
+                    quantizedMaskEnabled = !quantizedMaskEnabled;
+                    item.setIcon(quantizedMaskEnabled ? R.drawable.ic_quantize : R.drawable.ic_quantize_off);
+                    return true;
 
-            if (item.getItemId() == R.id.reset) {
-                anchors.clear();
+                case R.id.toggle_pointer:
+                    pointerMode = !pointerMode;
+                    item.setIcon(pointerMode ? R.drawable.ic_pointer : R.drawable.ic_pointer_off);
+                    return true;
 
-                if (session != null) {
-                    CameraConfig cameraConfig = session.getCameraConfig();
-                    Config config = session.getConfig();
+                case R.id.toggle_dual_screen:{
+                    dualScreenMode = !dualScreenMode;
+                    item.setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
 
-                    // Note that the order matters - GLSurfaceView is paused first so that it does not try
-                    // to query the session. If Session is paused before GLSurfaceView, GLSurfaceView may
-                    // still call session.update() and get a SessionPausedException.
-                    displayRotationHelper.onPause();
-                    mySurfaceView.onPause();
-                    session.pause();
+                    //Disabilito altre opzioni.
+                    maskEnabled = false;
+                    depthColorEnabled = false;
+                    optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
+                    optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
 
+                    //Attivo il depth solo se non siamo in dual mode.
+//                    optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
+
+                    onSessionPause();
                     session.close();
+                    session = null;
 
-                    try {
-                        session = new Session(this);
-                        session.setCameraConfig(cameraConfig);
-                        session.configure(config);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Exception creating session", e);
-                        session = null;
+                    //Cambio il fragment.
+
+                    FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+
+                    if (dualScreenMode) {
+                        fragmentTransaction.replace(R.id.container, dualFragment);
+                        fragmentTransaction.commit();
+
+                        currentFragment = dualFragment;
+                    } else {
+                        fragmentTransaction.replace(R.id.container, singleFragment);
+                        fragmentTransaction.commit();
+
+                        currentFragment = singleFragment;
                     }
 
-                    if(session != null){
-                        // Note that order matters - see the note in onPause(), the reverse applies here.
-                        try {
-                            session.resume();
-                        } catch (CameraNotAvailableException e) {
-                            showLoadingMessage(R.string.camera_not_available, Snackbar.LENGTH_LONG);
-                            session = null;
-                        }
+                    onSessionResume();
 
-                        mySurfaceView.onResume();
-                        displayRotationHelper.onResume();
-                    }
+                    return true;
                 }
+                case R.id.reset: {
+                    anchors.clear();
 
-                return true;
+                    //Disabilito altre opzioni.
+                    maskEnabled = false;
+                    depthColorEnabled = false;
+                    optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
+                    optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
+
+                    if (session != null) {
+                        onSessionPause();
+                        session.close();
+                        session = null;
+                        onSessionResume();
+                    }
+
+                    return true;
+                }
+                default:
+                    return false;
             }
-
-            if(item.getItemId() == R.id.toggle_quantize){
-                quantizedMaskEnabled = !quantizedMaskEnabled;
-                item.setIcon(quantizedMaskEnabled ? R.drawable.ic_quantize : R.drawable.ic_quantize_off);
-
-                return true;
-            }
-
-            return false;
         });
-
-
-        //Helpers
-        displayRotationHelper = new DisplayRotationHelper(/*context=*/ this);
 
         //Pydnet: ricavo il modello.
         //Oggetti per la pydnet
@@ -257,31 +301,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         colorMapper = new ColorMapper(COLOR_SCALE_FACTOR, true, NUMBER_THREADS);
         colorMapper.prepare(RESOLUTION);
 
-        //Impostazioni opengl
-        // Set up tap listener.
-        tapHelper = new TapHelper(this);
-        mySurfaceView.setOnTouchListener(tapHelper);
-
-        // Set up renderer.
-        mySurfaceView.setPreserveEGLContextOnPause(true);
-        //Provo un contesto 3.0, che mi serve per il caricamento della maschera di float.
-        mySurfaceView.setEGLContextClientVersion(3);
-        mySurfaceView.setEGLConfigChooser(8, 8, 8, 8, 16, 8); // Alpha used for plane blending.
-        mySurfaceView.setRenderer(this);
-        mySurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
-        mySurfaceView.setWillNotDraw(false);
-
         installRequested = false;
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        inferenceHandlerThread = new HandlerThread("inference");
-        inferenceHandlerThread.start();
-        inferenceHandler = new Handler(inferenceHandlerThread.getLooper());
-
+    public void onSessionResume(){
         if (session == null) {
             Exception exception = null;
             String message = null;
@@ -346,9 +369,30 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             return;
         }
 
-        mySurfaceView.onResume();
+        currentFragment.onResume();
         displayRotationHelper.onResume();
+    }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        inferenceHandlerThread = new HandlerThread("inference");
+        inferenceHandlerThread.start();
+        inferenceHandler = new Handler(inferenceHandlerThread.getLooper());
+
+        onSessionResume();
+    }
+
+    public void onSessionPause(){
+        if (session != null) {
+            // Note that the order matters - GLSurfaceView is paused first so that it does not try
+            // to query the session. If Session is paused before GLSurfaceView, GLSurfaceView may
+            // still call session.update() and get a SessionPausedException.
+            displayRotationHelper.onPause();
+            currentFragment.onPause();
+            session.pause();
+        }
     }
 
     @Override
@@ -365,14 +409,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
         super.onPause();
 
-        if (session != null) {
-            // Note that the order matters - GLSurfaceView is paused first so that it does not try
-            // to query the session. If Session is paused before GLSurfaceView, GLSurfaceView may
-            // still call session.update() and get a SessionPausedException.
-            displayRotationHelper.onPause();
-            mySurfaceView.onPause();
-            session.pause();
-        }
+
     }
 
     @Override
@@ -431,6 +468,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             virtualObjectShadow.setBlendMode(ObjectRenderer.BlendMode.Shadow);
             virtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
 
+            pointerRenderer.createOnGlThread(this, "models/mirino.png");
+
         } catch (IOException e) {
             Log.e(TAG, "Failed to read an asset file", e);
         }
@@ -438,9 +477,16 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        displayRotationHelper.onSurfaceChanged(width, height);
-        calibrator.setSurfaceWidth(width);
-        calibrator.setSurfaceHeight(height);
+        Size surfaceSize = new Size(width, height);
+
+        surfaceWidth = width;
+        surfaceHeight = height;
+
+        backgroundRenderer.updateBuffers(surfaceWidth, surfaceHeight);
+
+        displayRotationHelper.onSurfaceChanged(surfaceSize);
+        calibrator.setResolution(width, height);
+        pointerRenderer.setResolution(width, height);
         GLES20.glViewport(0, 0, width, height);
     }
 
@@ -528,40 +574,23 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
             //IMPORTANTE: fa il binding tra la texutre che andrà in background e la camera.
             session.setCameraTextureName(backgroundRenderer.getBackgroundTextureId());
+
             // Obtain the current frame from ARSession. When the configuration is set to
             // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
             // camera framerate.
             frame = session.update();
 
+            //Ricavo il frame da opengl: il frame della camera è diverso da quello di arcore.
+            if(!isProcessingFrame){
+                currentModel.loadInput(backgroundRenderer.screenshot(RESOLUTION));
 
-            //Ricavo il frame della camera che mi servirà anche per il calcolo neurale.
-            try{
-                if (!isProcessingFrame) {
-                    cameraImage = frame.acquireCameraImage();
-                    int width = cameraImage.getWidth();
-                    int height = cameraImage.getHeight();
+                //Posso far partire il modello.
+                isProcessingFrame = true;
 
-                    backgroundRenderer.clipBackgroundTexture(width, height, RESOLUTION);
-
-                    //Converto l'immagine per la rete:
-                    //Devo convertirla nel format ARGB
-                    //Devo fare un crop.
-                    Bitmap pydnetImage = convertAndCrop(cameraImage, RESOLUTION);
-                    currentModel.loadInput(pydnetImage);
-                    pydnetImage.recycle();
-
-                    //Posso far partire il modello.
-                    isProcessingFrame = true;
-
-                    runInBackground(() -> {
-                        inference = currentModel.doInference(SCALE);
-                        isProcessingFrame = false;
-                    });
-
-                    cameraImage.close();
-                }
-            }catch (NotYetAvailableException ex){
-                Log.d(TAG, "Camera non pronta.");
+                runInBackground(() -> {
+                    inference = currentModel.doInference(SCALE);
+                    isProcessingFrame = false;
+                });
             }
 
             Camera camera = frame.getCamera();
@@ -628,13 +657,23 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     }
                 }
 
-                if (depthColorEnabled) {
+                if (depthColorEnabled || dualScreenMode) {
                     Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
-                    backgroundRenderer.loadDepthColorImage(bitmapDepthColor);
 
-                    planeRenderer.loadDepthColorImage(bitmapDepthColor);
-                    virtualObject.loadDepthColorImage(bitmapDepthColor);
-                    virtualObjectShadow.loadDepthColorImage(bitmapDepthColor);
+
+                    if(depthColorEnabled){
+                        backgroundRenderer.loadDepthColorImage(bitmapDepthColor);
+
+                        planeRenderer.loadDepthColorImage(bitmapDepthColor);
+                        virtualObject.loadDepthColorImage(bitmapDepthColor);
+                        virtualObjectShadow.loadDepthColorImage(bitmapDepthColor);
+                    }
+
+                    if(dualScreenMode){
+                        dualFragment.updateData(surfaceWidth, surfaceHeight, RESOLUTION);
+                        dualFragment.updateDepthImage(bitmapDepthColor);
+                        dualFragment.requestRender();
+                    }
 
                     bitmapDepthColor.recycle();
                 }
@@ -726,6 +765,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 //                runOnUiThread(()->distanceTextView.setText(getString(R.string.distance, localDistance)));
             }
 
+            if(pointerMode){
+                pointerRenderer.draw();
+            }
+
         } catch (Throwable t) {
             // Avoid crashing the application due to unhandled exceptions.
             Log.e(TAG, "Exception on the OpenGL thread", t);
@@ -739,42 +782,55 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private void handleTap(Frame frame, Camera camera) {
         MotionEvent tap = tapHelper.poll();
 
-        if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-            for (HitResult hit : frame.hitTest(tap)) {
+        if (tap != null) {
+            if (pointerMode) {
+                int x = Math.round(tap.getRawX());
+                int y = Math.round(tap.getRawY());
 
-                // Check if any plane was hit, and if it was hit inside the plane polygon
-                Trackable trackable = hit.getTrackable();
-                // Creates an anchor if a plane or an oriented point was hit.
+                pointerRenderer.setXY(x,y);
+            } else{
+                if (camera.getTrackingState() == TrackingState.TRACKING) {
+                    for (HitResult hit : frame.hitTest(tap)) {
 
-                if ((trackable instanceof Plane
-                        && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
-                        && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
-                        || (trackable instanceof Point
-                        && ((Point) trackable).getOrientationMode()
-                        == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
+                        // Check if any plane was hit, and if it was hit inside the plane polygon
+                        Trackable trackable = hit.getTrackable();
+                        // Creates an anchor if a plane or an oriented point was hit.
 
-                    // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
-                    // Cap the number of objects created. This avoids overloading both the
-                    // rendering system and ARCore.
-                    if (anchors.size() >= 20) {
-                        anchors.get(0).anchor.detach();
-                        anchors.remove(0);
+                        if ((trackable instanceof Plane
+                                && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
+                                && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
+                                || (trackable instanceof Point
+                                && ((Point) trackable).getOrientationMode()
+                                == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
+
+                            // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
+                            // Cap the number of objects created. This avoids overloading both the
+                            // rendering system and ARCore.
+                            if (anchors.size() >= 20) {
+                                anchors.get(0).anchor.detach();
+                                anchors.remove(0);
+                            }
+
+                            // Assign a color to the object for rendering.
+                            Anchor anchor = hit.createAnchor();
+
+                            float[] myMatrix = new float[16];
+                            anchor.getPose().toMatrix(myMatrix, 0);
+
+//                            Log.d(TAG, "Raw XY: " + tap.getRawX() + ", " + tap.getRawY());
+//                            Log.d(TAG, "XY test: " + calibrator.xyTest(anchor.getPose(), tap.getRawX(), tap.getRawY()));
+//                            Log.d(TAG, "Calibration test: " + calibrator.calibrationTest(inference, anchor.getPose(), camera.getDisplayOrientedPose(), tap.getRawX(), tap.getRawY()));
+
+                            float[] objColor = new float[]{233.0f, 233.0f, 244.0f, 255.0f};
+
+                            // Adding an Anchor tells ARCore that it should track this position in
+                            // space. This anchor is created on the Plane to place the 3D model
+                            // in the correct position relative both to the world and to the plane.
+                            anchors.add(new ColoredAnchor(anchor, objColor));
+
+                            break;
+                        }
                     }
-
-                    // Assign a color to the object for rendering.
-                    Anchor anchor = hit.createAnchor();
-                    Log.d(TAG, "Raw XY: "+tap.getRawX()+", "+tap.getRawY());
-                    Log.d(TAG, "XY test: "+calibrator.xyTest(anchor.getPose(), tap.getRawX(), tap.getRawY()));
-                    Log.d(TAG, "Calibration test: "+calibrator.calibrationTest(inference, anchor.getPose(), camera.getDisplayOrientedPose(), tap.getRawX(), tap.getRawY()));
-
-                    float[] objColor = new float[]{233.0f, 233.0f, 244.0f, 255.0f};
-
-                    // Adding an Anchor tells ARCore that it should track this position in
-                    // space. This anchor is created on the Plane to place the 3D model
-                    // in the correct position relative both to the world and to the plane.
-                    anchors.add(new ColoredAnchor(anchor, objColor));
-
-                    break;
                 }
             }
         }
