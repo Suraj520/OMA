@@ -103,7 +103,7 @@ public class ARDualFragment extends Fragment {
     }
 
 
-    public void updateData(int previewWidth, int previewHeight, Utils.Resolution resolution){
+    public void onSurfaceChanged(int previewWidth, int previewHeight, Utils.Resolution resolution){
         this.previewWidth = previewWidth;
         this.previewHeight = previewHeight;
         this.resolution = resolution;

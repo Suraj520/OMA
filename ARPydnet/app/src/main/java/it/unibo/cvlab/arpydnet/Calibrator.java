@@ -64,7 +64,7 @@ public class Calibrator {
         this.displayRotation = displayRotation;
     }
 
-    public void setResolution(int surfaceWidth, int surfaceHeight){
+    public void onSurfaceChanged(int surfaceWidth, int surfaceHeight){
         this.surfaceWidth = surfaceWidth;
         this.surfaceHeight = surfaceHeight;
     }

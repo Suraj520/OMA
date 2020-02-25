@@ -52,7 +52,6 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 
@@ -63,7 +62,6 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
 import it.unibo.cvlab.pydnet.ColorMapper;
-import it.unibo.cvlab.pydnet.ImageUtils;
 import it.unibo.cvlab.pydnet.Model;
 import it.unibo.cvlab.pydnet.ModelFactory;
 import it.unibo.cvlab.pydnet.Utils;
@@ -140,7 +138,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     //Oggetti usati per l'unione della Pydnet e ARCore
     //Immagine dalla camera: usata per la maschera e per la pydnet.
     Image cameraImage = null;
-    private int surfaceWidth, surfaceHeight;
 
     //Usato per calibrare le maschere degli oggetti.
     private Calibrator calibrator = null;
@@ -477,16 +474,15 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        Size surfaceSize = new Size(width, height);
+        backgroundRenderer.onSurfaceChanged(width, height);
+        backgroundRenderer.updateBuffers(width, height);
+        calibrator.onSurfaceChanged(width, height);
+        pointerRenderer.onSurfaceChanged(width, height);
 
-        surfaceWidth = width;
-        surfaceHeight = height;
+        displayRotationHelper.onSurfaceChanged(width, height);
 
-        backgroundRenderer.updateBuffers(surfaceWidth, surfaceHeight);
+        dualFragment.onSurfaceChanged(width, height, RESOLUTION);
 
-        displayRotationHelper.onSurfaceChanged(surfaceSize);
-        calibrator.setResolution(width, height);
-        pointerRenderer.setResolution(width, height);
         GLES20.glViewport(0, 0, width, height);
     }
 
@@ -495,55 +491,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         if (inferenceHandler != null) {
             inferenceHandler.post(r);
         }
-    }
-
-    //https://github.com/FilippoAleotti/mobilePydnet/
-    protected void fillBytes(final Image.Plane[] planes, final byte[][] yuvBytes) {
-        // Because of the variable row stride it's not possible to know in
-        // advance the actual necessary dimensions of the yuv planes.
-        for (int i = 0; i < planes.length; ++i) {
-            final ByteBuffer buffer = planes[i].getBuffer();
-            if (yuvBytes[i] == null) {
-//                LOGGER.d("Initializing buffer %d at size %d", i, buffer.capacity());
-                yuvBytes[i] = new byte[buffer.capacity()];
-            }
-            buffer.get(yuvBytes[i]);
-        }
-    }
-
-    //https://github.com/FilippoAleotti/mobilePydnet/
-    private Bitmap convertAndCrop(Image image, Utils.Resolution resolution) {
-        Image.Plane[] planes = image.getPlanes();
-
-        final byte[][] yuvBytes = new byte[3][];
-        fillBytes(planes, yuvBytes);
-
-        final int yRowStride = planes[0].getRowStride();
-        final int uvRowStride = planes[1].getRowStride();
-        final int uvPixelStride = planes[1].getPixelStride();
-
-        int[] rgbInts = new int[image.getWidth() * image.getHeight()];
-
-        ImageUtils.convertYUV420ToARGB8888(
-                yuvBytes[0],
-                yuvBytes[1],
-                yuvBytes[2],
-                image.getWidth(),
-                image.getHeight(),
-                yRowStride,
-                uvRowStride,
-                uvPixelStride,
-                rgbInts);
-
-        Bitmap bmp = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
-        bmp.setPixels(rgbInts, 0, image.getWidth(), 0, 0, image.getWidth(), image.getHeight());
-
-//        Bitmap croppedBmp = Bitmap.createBitmap(bmp, 0, 0, resolution.getWidth(), resolution.getHeight());
-        Bitmap scaledBmp = Bitmap.createScaledBitmap(bmp, resolution.getWidth(), resolution.getHeight(), true);
-
-        bmp.recycle();
-
-        return scaledBmp;
     }
 
     @Override
@@ -582,6 +529,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
             //Ricavo il frame da opengl: il frame della camera è diverso da quello di arcore.
             if(!isProcessingFrame){
+//                currentModel.loadInput(backgroundRenderer.screenshot(RESOLUTION));
                 currentModel.loadInput(backgroundRenderer.screenshot(RESOLUTION));
 
                 //Posso far partire il modello.
@@ -670,7 +618,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     }
 
                     if(dualScreenMode){
-                        dualFragment.updateData(surfaceWidth, surfaceHeight, RESOLUTION);
                         dualFragment.updateDepthImage(bitmapDepthColor);
                         dualFragment.requestRender();
                     }

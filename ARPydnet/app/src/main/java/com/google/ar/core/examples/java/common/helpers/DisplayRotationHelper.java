@@ -83,6 +83,19 @@ public final class DisplayRotationHelper implements DisplayListener {
     }
 
     /**
+     * Records a change in surface dimensions. This will be later used by {@link
+     * #updateSessionIfNeeded(Session)}. Should be called from {@link
+     * android.opengl.GLSurfaceView.Renderer
+     * #onSurfaceChanged(javax.microedition.khronos.opengles.GL10, int, int)}.
+     *
+     * @param width the updated width of the surface.
+     * @param height the updated height of the surface.
+     */
+    public void onSurfaceChanged(int width, int height) {
+        onSurfaceChanged(new Size(width, height));
+    }
+
+    /**
      * Updates the session display geometry if a change was posted either by {@link
      * #onSurfaceChanged(Size)} call or by {@link #onDisplayChanged(int)} system callback. This
      * function should be called explicitly before each call to {@link Session#update()}. This

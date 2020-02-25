@@ -88,7 +88,7 @@ public class PointerRenderer {
         updateModelMatrix();
     }
 
-    public void setResolution(int width, int height) {
+    public void onSurfaceChanged(int width, int height) {
         this.width = width;
         this.height = height;
         updateModelMatrix();

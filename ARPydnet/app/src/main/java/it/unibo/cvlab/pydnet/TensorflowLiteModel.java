@@ -65,6 +65,8 @@ public class TensorflowLiteModel extends Model{
      */
     @Override
     public void prepare(Utils.Resolution resolution) {
+        this.resolution = resolution;
+
         //RGB: per ogni canale un float (4 byte) il tutto va moltiplicato per il numero di pixel (W*H)
         input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * 4);
         //Qui ho solo il canale di profondità: restituisce un float di distanza per ogni pixel.
@@ -93,6 +95,53 @@ public class TensorflowLiteModel extends Model{
         input.rewind();
     }
 
+    public void loadInput(int[] data, ColorConfig config){
+        if (!isPrepared) {
+            throw new RuntimeException("Model is not prepared.");
+        }
+
+        input.rewind();
+        fillInputWithData(data, config);
+        input.rewind();
+    }
+
+    /**
+     * Inserisce nel buffer in della pydnet l'immagine.
+     *
+     * @param bitmap Immagine da inserire.
+     */
+    private void fillInputByteBufferWithBitmap(Bitmap bitmap) {
+        bitmap.getPixels(intInputPixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+        fillInputWithData(intInputPixels, ColorConfig.parseBitmapConfig(bitmap.getConfig()));
+    }
+
+    private void fillInputWithData(int[] data, ColorConfig config){
+        // Convert the image to floating point.
+        for (int j = 0; j < resolution.getHeight(); ++j) {
+            for (int i = 0; i < resolution.getWidth(); ++i) {
+
+                final Origin srcOrigin = config.getOrigin();
+                final int val = data[srcOrigin.convertTo(i, j, resolution.getWidth(), resolution.getHeight(), Origin.TOP_LEFT)];
+
+                //Format ARGB
+                //Valido anche il formato RGB
+
+                //Ogni pixel viene normalizzato e passato come float32.
+                input.putFloat((((val >> config.getRedShift()) & 0xFF))/ 255.0f);
+                input.putFloat((((val >> config.getGreenShift()) & 0xFF))/255.0f);
+                input.putFloat((((val >> config.getBlueShift()) & 0xFF))/255.0f);
+
+                //Se si riuscisse a quantizzare il modello, anche con gli ingressi e le uscite,
+                //Allora dovrei passare degli interi: Per ora il modello quantizzato non funge:
+                //Da rivedere.
+
+//                inputByteBuffer.put((byte)((val >> 16) & 0xFF));
+//                inputByteBuffer.put((byte)((val >> 8) & 0xFF));
+//                inputByteBuffer.put((byte)((val) & 0xFF));
+            }
+        }
+    }
+
     @NonNull
     public FloatBuffer doInference(Utils.Scale scale){
         if (!isPrepared) {
@@ -116,41 +165,6 @@ public class TensorflowLiteModel extends Model{
         inference.rewind();
 
         return inference.asFloatBuffer().duplicate();
-    }
-
-
-    // Helper methods
-
-    /**
-     * Inserisce nel buffer in della pydnet l'immagine.
-     *
-     * @param bitmap Immagine da inserire.
-     */
-    private void fillInputByteBufferWithBitmap(Bitmap bitmap) {
-        bitmap.getPixels(intInputPixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-
-        // Convert the image to floating point.
-        int pixel = 0;
-        for (int i = 0; i < bitmap.getWidth(); ++i) {
-            for (int j = 0; j < bitmap.getHeight(); ++j) {
-                final int val = intInputPixels[pixel++];
-
-                //Format ARGB
-
-                //Ogni pixel viene normalizzato e passato come float32.
-                input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
-                input.putFloat((((val >> 8) & 0xFF))/255.0f);
-                input.putFloat((((val) & 0xFF))/255.0f);
-
-                //Se si riuscisse a quantizzare il modello, anche con gli ingressi e le uscite,
-                //Allora dovrei passare degli interi: Per ora il modello quantizzato non funge:
-                //Da rivedere.
-
-//                inputByteBuffer.put((byte)((val >> 16) & 0xFF));
-//                inputByteBuffer.put((byte)((val >> 8) & 0xFF));
-//                inputByteBuffer.put((byte)((val) & 0xFF));
-            }
-        }
     }
 
     // Helper static methods
