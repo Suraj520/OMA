@@ -7,12 +7,14 @@ import cv2 as cv2
 
 
 #DATASET_PATH = "/home/luca/Scrivania/tirocinio/optimizations/dataset/kitti2/"
-DATASET_PATH = "/home/luca/Scrivania/tirocinio/optimizations/dataset/generated/15022020_111357/images/"
+#DATASET_PATH = "/home/luca/Scrivania/tirocinio/optimizations/dataset/generated/15022020_111357/images/"
+DATASET_PATH = "/home/luca/Scrivania/OMA/datasets/generated/26022020_164807/images/"
+DATASET_SIZE = 202
 
 CROP_RES = (640,448)
 
-GRAPH_PB_PATH = "/home/luca/Scrivania/tirocinio/mobilePydnet/Android/app/src/main/assets/optimized_pydnet++.pb"
-GRAPH_TFLITE_PATH = "/home/luca/Scrivania/tirocinio/mobilePydnet/Android/app/src/main/assets/optimized_pydnet++.tflite"
+GRAPH_PB_PATH = "/home/luca/Scrivania/OMA/optimizations/default/optimized_pydnet++.pb"
+GRAPH_TFLITE_PATH = "/home/luca/Scrivania/OMA/optimizations/default/optimized_pydnet++.tflite"
 
 #Funzione per creare il dataset rappresentativo.
 #https://stackoverflow.com/questions/57877959/what-is-the-correct-way-to-create-representative-dataset-for-tfliteconverter
@@ -22,7 +24,7 @@ GRAPH_TFLITE_PATH = "/home/luca/Scrivania/tirocinio/mobilePydnet/Android/app/src
 
 def rep_data_gen():
 	a=[]
-	for i in range(217):
+	for i in range(DATASET_SIZE):
 		""" file_name = str(i).zfill(10) + ".png" """
 		file_name = str(i) + ".png"
 		img = cv2.imread(DATASET_PATH + file_name)
@@ -83,21 +85,25 @@ input_shapes = {'im0': [1,448,640,3]}
 
 converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, input_tensors, output_tensors, input_shapes)
 
+#Default
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.experimental_new_converter = True
+
 #Ottimizzazione Full Integer: Ha bisogno di un dataset rappresentativo.
 #converter.optimizations = [tf.lite.Optimize.DEFAULT]
 #converter.representative_dataset = rep_data_gen
-
-#Operazione non supportata: 
+#converter.experimental_new_quantizer = True
 #converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-#converter.inference_input_type = tf.int8
-#converter.inference_output_type = tf.int8
+#converter.inference_input_type = tf.uint8
+#converter.inference_output_type = tf.uint8
+#converter.inference_type = tf.uint8
+#converter.quantized_input_stats = {"im0": (0.0, 255.0)}
 
 #FLOAT16 optimization
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.target_spec.supported_types = [tf.float16]
+#converter.optimizations = [tf.lite.Optimize.DEFAULT]
+#converter.target_spec.supported_types = [tf.float16]
+#converter.experimental_new_converter = True
 
 #Conversione vera e propria
-converter.experimental_new_converter = True
-#converter.experimental_new_quantizer = True
 tflite_model = converter.convert()
 open("converted_model.tflite", "wb").write(tflite_model)
