@@ -673,7 +673,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     public void setNumPointsLog(int numPoints){
         String text = getString(R.string.log_numPoints, numPoints, minNumPoints);
-        logTextView.setText(text);
+        runOnUiThread(()->logTextView.setText(text));
     }
 
 }
