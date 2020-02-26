@@ -9,6 +9,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 
 import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.gpu.GpuDelegate;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
 
 import java.io.FileInputStream;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -33,7 +35,8 @@ public class TensorflowLiteModel extends Model{
 
 
         //Ora la GPU non è supportata.
-//        GpuDelegate delegate = new GpuDelegate();
+        GpuDelegate delegate = new GpuDelegate();
+
 //        Interpreter.Options tfliteOptions = new Interpreter.Options().addDelegate(delegate);
 
         Interpreter.Options tfliteOptions = new Interpreter.Options();
@@ -41,10 +44,10 @@ public class TensorflowLiteModel extends Model{
         //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
         //e cerco di usare le API di Android per ANN.
         // Initialize interpreter with NNAPI delegate for Android Pie or above
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            NnApiDelegate nnApiDelegate = new NnApiDelegate();
-            tfliteOptions.addDelegate(nnApiDelegate);
-        }
+//        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+//            NnApiDelegate nnApiDelegate = new NnApiDelegate();
+//            tfliteOptions.addDelegate(nnApiDelegate);
+//        }
 
         tfliteOptions.setAllowFp16PrecisionForFp32(true);
         tfliteOptions.setNumThreads(4);
@@ -71,14 +74,11 @@ public class TensorflowLiteModel extends Model{
         input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * 4);
         //Qui ho solo il canale di profondità: restituisce un float di distanza per ogni pixel.
         inference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * 4);
-        //Si tratta del buffer di sopra normalizzato
-        normalizedInference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * 4);
         //Questo è utilizzato per ricavare i canali dell'immagine.
         intInputPixels = new int[resolution.getWidth() * resolution.getHeight()];
 
         input.order(ByteOrder.nativeOrder());
         inference.order(ByteOrder.nativeOrder());
-        normalizedInference.order(ByteOrder.nativeOrder());
 
         isPrepared = true;
 
@@ -95,13 +95,13 @@ public class TensorflowLiteModel extends Model{
         input.rewind();
     }
 
-    public void loadInput(int[] data, ColorConfig config){
+    public void loadInput(int[] data){
         if (!isPrepared) {
             throw new RuntimeException("Model is not prepared.");
         }
 
         input.rewind();
-        fillInputWithData(data, config);
+        fillInputWithData(data);
         input.rewind();
     }
 
@@ -112,32 +112,43 @@ public class TensorflowLiteModel extends Model{
      */
     private void fillInputByteBufferWithBitmap(Bitmap bitmap) {
         bitmap.getPixels(intInputPixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-        fillInputWithData(intInputPixels, ColorConfig.parseBitmapConfig(bitmap.getConfig()));
+        fillInputWithData(intInputPixels);
     }
 
-    private void fillInputWithData(int[] data, ColorConfig config){
+    private void fillInputWithData(int[] data){
         // Convert the image to floating point.
-        for (int j = 0; j < resolution.getHeight(); ++j) {
-            for (int i = 0; i < resolution.getWidth(); ++i) {
+        final int width = resolution.getWidth();
+        final int height = resolution.getHeight();
 
-                final Origin srcOrigin = config.getOrigin();
-                final int val = data[srcOrigin.convertTo(i, j, resolution.getWidth(), resolution.getHeight(), Origin.TOP_LEFT)];
-
-                //Format ARGB
-                //Valido anche il formato RGB
+        int pixel = 0;
+        for (int j = 0; j < height ; ++j) {
+            for (int i = 0; i < width; ++i) {
+                final int val = data[pixel++];
 
                 //Ogni pixel viene normalizzato e passato come float32.
-                input.putFloat((((val >> config.getRedShift()) & 0xFF))/ 255.0f);
-                input.putFloat((((val >> config.getGreenShift()) & 0xFF))/255.0f);
-                input.putFloat((((val >> config.getBlueShift()) & 0xFF))/255.0f);
+                input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
+                input.putFloat((((val >> 8) & 0xFF))/255.0f);
+                input.putFloat((((val) & 0xFF))/255.0f);
+            }
+        }
+    }
 
-                //Se si riuscisse a quantizzare il modello, anche con gli ingressi e le uscite,
-                //Allora dovrei passare degli interi: Per ora il modello quantizzato non funge:
-                //Da rivedere.
+    public void loadInput(IntBuffer data){
+        input.rewind();
+        data.rewind();
 
-//                inputByteBuffer.put((byte)((val >> 16) & 0xFF));
-//                inputByteBuffer.put((byte)((val >> 8) & 0xFF));
-//                inputByteBuffer.put((byte)((val) & 0xFF));
+        // Convert the image to floating point.
+        final int width = resolution.getWidth();
+        final int height = resolution.getHeight();
+
+        for (int j = 0; j < height ; ++j) {
+            for (int i = 0; i < width; ++i) {
+                final int val = data.get();
+
+                //Ogni pixel viene normalizzato e passato come float32.
+                input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
+                input.putFloat((((val >> 8) & 0xFF))/255.0f);
+                input.putFloat((((val) & 0xFF))/255.0f);
             }
         }
     }
@@ -153,18 +164,11 @@ public class TensorflowLiteModel extends Model{
 
         //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
         //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.
-
-//        Object[] inputArray = new Object[tfLite.getInputTensorCount()];
-//        inputArray[tfLite.getInputIndex(getInputNode("image"))] = inputByteBuffer;
-//
-//        Map<Integer, Object> outputMap = new HashMap<>();
-//        outputMap.put(tfLite.getOutputIndex(outputNodes.get(scale)), outputByteBuffer);
-
         this.tfLite.run(input, inference);
 
         inference.rewind();
 
-        return inference.asFloatBuffer().duplicate();
+        return inference.asFloatBuffer();
     }
 
     // Helper static methods

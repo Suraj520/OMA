@@ -572,6 +572,8 @@ public class ObjectRenderer {
 
         GLES20.glBindTexture(textureTarget, 0);
 
+        ShaderUtil.checkGLError(TAG, "mask loading");
+
         // Recycle the bitmap, since its data has been loaded into OpenGL.
         //Faccio il recycle solo del bitmap interno
         if(flipped != image)

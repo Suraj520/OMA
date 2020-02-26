@@ -26,6 +26,7 @@ import androidx.annotation.NonNull;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -153,7 +154,6 @@ public abstract class Model{
 
     protected ByteBuffer input;
     protected ByteBuffer inference;
-    protected ByteBuffer normalizedInference;
 
     protected boolean prepared;
 
@@ -195,7 +195,16 @@ public abstract class Model{
     public abstract void prepare(Utils.Resolution resolution);
 
     public abstract void loadInput(Bitmap input);
-    public abstract void loadInput(int[] data, ColorConfig config);
+    public abstract void loadInput(int[] data);
+    public abstract void loadInput(IntBuffer data);
+
+    public void loadDirect(ByteBuffer input){
+        this.input = input;
+    }
+
+    public void loadDirectDuplicate(ByteBuffer input){
+        this.input = input.duplicate();
+    }
 
     public abstract FloatBuffer doInference(Utils.Scale scale);
 

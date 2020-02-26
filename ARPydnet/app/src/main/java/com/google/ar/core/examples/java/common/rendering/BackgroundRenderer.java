@@ -16,6 +16,7 @@ package com.google.ar.core.examples.java.common.rendering;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Matrix;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
@@ -32,10 +33,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 
 import it.unibo.cvlab.pydnet.Model;
-import it.unibo.cvlab.pydnet.Utils;
 
 /**
  * This class renders the AR background from camera feed. It creates and hosts the texture given to
@@ -103,7 +102,7 @@ public class BackgroundRenderer {
         return textures[1];
     }
 
-    private int getColorFrameBufferTextureId(){
+    public int getScreenshotFrameBufferTextureId(){
         return textures[2];
     }
 
@@ -117,46 +116,28 @@ public class BackgroundRenderer {
         this.depthColorEnabled = depthColorEnabled;
     }
 
-    private IntBuffer frameBuffer = IntBuffer.allocate(1);
+    private int[] frameBuffers = new int[1];
 
-    //Dati aggiuntivi per fare lo screenshot
-//    private int surfaceWidth, surfaceHeight;
-    private int framebufferWidth, framebufferHeight;
-
-    private int[] pixelData;
-    private IntBuffer pixelDataBuffer;
-    private int[] bitmapData;
-
-    public void onSurfaceChanged(int width, int height){
-//        surfaceWidth = width;
-//        surfaceHeight = height;
-        updateBuffers(width, height);
+    private int getScreenshotFrameBuffer(){
+        return frameBuffers[0];
     }
 
-    public void updateBuffers(int framebufferWidth, int framebufferHeight){
-        this.framebufferWidth = framebufferWidth;
-        this.framebufferHeight = framebufferHeight;
-        pixelData = new int[framebufferWidth * framebufferHeight];
-        pixelDataBuffer = IntBuffer.wrap(pixelData);
-        bitmapData = new int[framebufferWidth * framebufferHeight];
-
+    public void onSurfaceChanged(int surfaceWidth, int surfaceHeight){
         //Devo aggiornare anche la texture associata al framebuffer
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
 
         int textureTarget = GLES20.GL_TEXTURE_2D;
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(textureTarget, getColorFrameBufferTextureId());
+        GLES20.glBindTexture(textureTarget, getScreenshotFrameBufferTextureId());
 
         //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, framebufferWidth, framebufferHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        GLES20.glTexImage2D(textureTarget, 0, GLES20.GL_RGBA, surfaceWidth, surfaceHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+
+        ShaderUtil.checkGLError(TAG, "Framebuffer texture allocate");
 
         GLES20.glBindTexture(textureTarget, 0);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-    }
-
-    public Model.ColorConfig getFrameBufferColorConfig(){
-        return Model.ColorConfig.RGBA_8888_BL;
     }
 
     /**
@@ -182,6 +163,7 @@ public class BackgroundRenderer {
 
         GLES20.glBindTexture(textureTarget, 0);
 
+
         textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
@@ -199,14 +181,13 @@ public class BackgroundRenderer {
 
         //Creazione del framebuffer per il rendering alternativo alla finestra.
         //Ho bisogno anche di una texture aggiuntiva dove salvare il rendering
-        GLES20.glGenFramebuffers(1, frameBuffer);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
+        GLES20.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
 
-        //Associazione strana con la texture che non ho capito.
         textureTarget = GLES20.GL_TEXTURE_2D;
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(textureTarget, getColorFrameBufferTextureId());
+        GLES20.glBindTexture(textureTarget, getScreenshotFrameBufferTextureId());
 
         GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
@@ -214,14 +195,14 @@ public class BackgroundRenderer {
         GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
         GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
 
-        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, getColorFrameBufferTextureId(), 0);
-
-        GLES20.glBindTexture(textureTarget, 0);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, textureTarget, getScreenshotFrameBufferTextureId(), 0);
 
         if (GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) == GLES20.GL_FRAMEBUFFER_COMPLETE) {
             Log.d(TAG, "Framebuffer caricato correttamente");
         }
+
+        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "Framebuffer loading");
 
@@ -325,6 +306,8 @@ public class BackgroundRenderer {
      * BackgroundRenderer#backgroundTexCoordsBuffer} image texture coordinates.
      */
     private void draw() {
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 0");
+
         // Ensure position is rewound before use.
         backgroundTexCoordsBuffer.position(0);
         maskTexCoordsBuffer.position(0);
@@ -336,6 +319,8 @@ public class BackgroundRenderer {
 
         GLES20.glUseProgram(program);
 
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 1");
+
         //Binding delle texture
         GLES20.glUniform1i(depthColorTextureUniform, 0);
         GLES20.glUniform1i(backgroundTextureUniform,  2);
@@ -345,6 +330,8 @@ public class BackgroundRenderer {
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
+
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 2");
 
         // Set the vertex positions.
         GLES20.glVertexAttribPointer(
@@ -357,24 +344,12 @@ public class BackgroundRenderer {
         GLES20.glVertexAttribPointer(
                 maskTexCoordAttribute, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, maskTexCoordsBuffer);
 
-        //Debug
-
-//        backgroundCoordsBuffer.rewind();
-//        backgroundTexCoordsBuffer.rewind();
-//        maskTexCoordsBuffer.rewind();
-//
-//        float[] backgroundCoordsArray = new float[backgroundCoordsBuffer.remaining()];
-//        float[] backgroundTexCoordsArray = new float[backgroundTexCoordsBuffer.remaining()];
-//        float[] maskTexCoordsArray = new float[maskTexCoordsBuffer.remaining()];
-//
-//        for(int i = 0; i < backgroundCoordsArray.length && backgroundCoordsBuffer.hasRemaining(); i++) backgroundCoordsArray[i] = backgroundCoordsBuffer.get();
-//        for(int i = 0; i < backgroundTexCoordsArray.length && backgroundTexCoordsBuffer.hasRemaining(); i++) backgroundTexCoordsArray[i] = backgroundTexCoordsBuffer.get();
-//        for(int i = 0; i < maskTexCoordsArray.length && maskTexCoordsBuffer.hasRemaining(); i++) maskTexCoordsArray[i] = maskTexCoordsBuffer.get();
-
         // Enable vertex arrays
         GLES20.glEnableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
         GLES20.glEnableVertexAttribArray(maskTexCoordAttribute);
+
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 3");
 
         //Binding del coefficiente: Devo farlo falso per evitare colorazioni nel framebuffer.
         GLES20.glUniform1f(depthColorEnabledUniform, 0.0f);
@@ -382,23 +357,32 @@ public class BackgroundRenderer {
         //Disegno nel framebuffer
         //https://stackoverflow.com/questions/4041682/android-opengl-es-framebuffer-objects-rendering-depth-buffer-to-texture
         //https://github.com/google-ar/sceneform-android-sdk/issues/225
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
-
-//        GLES20.glViewport(0, 0, framebufferWidth, framebufferHeight);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
+
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 4");
 
         //Binding del coefficiente:
         GLES20.glUniform1f(depthColorEnabledUniform, depthColorEnabled ? 1.0f : 0.0f);
 
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-
-//        GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
+
+        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 5");
 
         // Disable vertex arrays
         GLES20.glDisableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glDisableVertexAttribArray(backgroundTexCoordAttribute);
         GLES20.glDisableVertexAttribArray(maskTexCoordAttribute);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         // Restore the depth state for further drawing.
         GLES20.glDepthMask(true);
@@ -444,59 +428,11 @@ public class BackgroundRenderer {
 
         GLES20.glBindTexture(textureTarget, 0);
 
+        ShaderUtil.checkGLError(TAG, "mask loading");
+
         // Recycle the bitmap, since its data has been loaded into OpenGL.
         //Faccio il recycle solo del bitmap interno
         if(flipped != image)
             flipped.recycle();
     }
-
-    /**
-     * Effettua uno "screenshot" della camera, senza effetti depth.
-     * @param resolution risoluzione screenshot
-     * @return Bitmap rgba con lo screenshot
-     */
-    public Bitmap screenshot(Utils.Resolution resolution){
-        return screenshot(resolution.getWidth(), resolution.getHeight());
-    }
-
-    /**
-     * Effettua uno "screenshot" della camera, senza effetti depth.
-     * @param width larghezza screenshot
-     * @param height altezza screenshot
-     * @return Bitmap rgba con lo screenshot
-     */
-    public Bitmap screenshot(int width, int height){
-        //Set frame buffer
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer.get(0));
-
-        // Read the pixels from framebuffer.
-        pixelDataBuffer.position(0);
-        GLES20.glReadPixels(0, 0, framebufferWidth, framebufferHeight,
-                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelDataBuffer);
-
-        //Return to screen frame.
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-
-        // Convert the pixel data from RGBA to what Android wants, ARGB.
-        for (int i = 0; i < framebufferHeight; i++) {
-            for (int j = 0; j < framebufferWidth; j++) {
-                int p = pixelData[i * framebufferWidth + j];
-                int b = (p & 0x00ff0000) >> 16;
-                int r = (p & 0x000000ff) << 16;
-                int ga = p & 0xff00ff00;
-                bitmapData[(framebufferHeight - i - 1) * framebufferWidth + j] = ga | r | b;
-            }
-        }
-
-        // Create a bitmap.
-        Bitmap bitmap = Bitmap.createBitmap(bitmapData,
-                framebufferWidth, framebufferHeight, Bitmap.Config.ARGB_8888);
-
-        Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, false);
-
-        bitmap.recycle();
-
-        return scaledBitmap;
-    }
-
 }

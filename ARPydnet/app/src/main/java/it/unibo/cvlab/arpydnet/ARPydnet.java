@@ -8,6 +8,7 @@ import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MotionEvent;
@@ -44,6 +45,7 @@ import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
 import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
 import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
+import com.google.ar.core.examples.java.common.rendering.ShaderUtil;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
@@ -60,12 +62,10 @@ import javax.microedition.khronos.opengles.GL10;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import butterknife.Unbinder;
 import it.unibo.cvlab.pydnet.ColorMapper;
 import it.unibo.cvlab.pydnet.Model;
 import it.unibo.cvlab.pydnet.ModelFactory;
 import it.unibo.cvlab.pydnet.Utils;
-import it.unibo.cvlab.pydnet.demo.Size;
 
 //Inspirata da:
 //https://github.com/FilippoAleotti/mobilePydnet/
@@ -90,8 +90,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     private Snackbar loadingMessageSnackbar = null;
 
-    private Unbinder unbinder;
-
     private boolean installRequested;
     private Session session;
 
@@ -112,7 +110,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private final ObjectRenderer virtualObjectShadow = new ObjectRenderer();
     private final PlaneRenderer planeRenderer = new PlaneRenderer();
     private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
+
     private final PointerRenderer pointerRenderer = new PointerRenderer();
+    private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
 
     //Ricavo il numero di thread massimi.
     private static int NUMBER_THREADS = Runtime.getRuntime().availableProcessors();
@@ -173,7 +173,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         setContentView(R.layout.activity_arpydnet);
 
         //Binding tra XML e Java tramite ButterKnife
-        unbinder = ButterKnife.bind(this);
+        ButterKnife.bind(this);
 
         //Posso attivare il depth color solo se sto in single mode.
         depthColorEnabled = !dualScreenMode && depthColorEnabled;
@@ -289,6 +289,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
         //Pydnet: ricavo il modello.
         //Oggetti per la pydnet
+        //TODO: Da spostare nel GL context 3.1 quando capisci come fare...
         ModelFactory modelFactory = new ModelFactory(getApplicationContext());
         currentModel = modelFactory.getModel(0);
         currentModel.prepare(RESOLUTION);
@@ -467,6 +468,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
             pointerRenderer.createOnGlThread(this, "models/mirino.png");
 
+            screenshotRenderer.createOnGlThread(this);
+            screenshotRenderer.updateScaledFrameBuffer(RESOLUTION);
+
+            ShaderUtil.checkGLError(TAG, "OnSurfaceCreated");
+
         } catch (IOException e) {
             Log.e(TAG, "Failed to read an asset file", e);
         }
@@ -475,13 +481,16 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         backgroundRenderer.onSurfaceChanged(width, height);
-        backgroundRenderer.updateBuffers(width, height);
+        screenshotRenderer.onSurfaceChanged(width, height);
         calibrator.onSurfaceChanged(width, height);
         pointerRenderer.onSurfaceChanged(width, height);
 
         displayRotationHelper.onSurfaceChanged(width, height);
 
         dualFragment.onSurfaceChanged(width, height, RESOLUTION);
+
+        //Lo faccio qui dove il background renderer ha già istanziato la texture necessaria all'altro programma.
+        screenshotRenderer.setColorFrameBufferTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
 
         GLES20.glViewport(0, 0, width, height);
     }
@@ -511,8 +520,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
             int displayRotation = displayRotationHelper.getDisplayRotation();
 
-//            Log.d(TAG, "Display rotation: "+displayRotation);
-
             calibrator.setDisplayRotation(displayRotation);
 
             planeRenderer.setScreenOrientation(displayRotation);
@@ -526,20 +533,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
             // camera framerate.
             frame = session.update();
-
-            //Ricavo il frame da opengl: il frame della camera è diverso da quello di arcore.
-            if(!isProcessingFrame){
-//                currentModel.loadInput(backgroundRenderer.screenshot(RESOLUTION));
-                currentModel.loadInput(backgroundRenderer.screenshot(RESOLUTION));
-
-                //Posso far partire il modello.
-                isProcessingFrame = true;
-
-                runInBackground(() -> {
-                    inference = currentModel.doInference(SCALE);
-                    isProcessingFrame = false;
-                });
-            }
 
             Camera camera = frame.getCamera();
             Pose cameraPose = camera.getDisplayOrientedPose();
@@ -639,6 +632,32 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // If frame is ready, render camera preview image to the GL surface
             backgroundRenderer.draw(frame);
 
+            //Devo ricavarlo dopo il rendering dello sfondo.
+            //Ricavo il frame da opengl: il frame della camera è diverso da quello di arcore.
+            if(!isProcessingFrame){
+                //Profile: 100 ms
+                //Vecchio metodo: 160 ms
+
+                long nanos = SystemClock.elapsedRealtime();
+                //20 ms
+                int[] screenshot = screenshotRenderer.screenshot();
+
+                Log.d(TAG, "screenshot take: " + (SystemClock.elapsedRealtime()-nanos));
+                nanos = SystemClock.elapsedRealtime();
+
+                //80 ms
+                currentModel.loadInput(screenshot);
+                Log.d(TAG, "LoadInput take: " + (SystemClock.elapsedRealtime()-nanos));
+
+                //Posso far partire il modello.
+                isProcessingFrame = true;
+
+                runInBackground(() -> {
+                    inference = currentModel.doInference(SCALE);
+                    isProcessingFrame = false;
+                });
+            }
+
             // Keep the screen unlocked while tracking, but allow it to lock when tracking stops.
             trackingStateHelper.updateKeepScreenOnFlag(camera.getTrackingState());
 
@@ -705,11 +724,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
                 virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-
-                //Per ogni elemento devo aggiungere una maschera:
-                //Ricavo la distanza dall'ancora
-//                float localDistance = getDistance(objPose, cameraPose);
-//                runOnUiThread(()->distanceTextView.setText(getString(R.string.distance, localDistance)));
             }
 
             if(pointerMode){
