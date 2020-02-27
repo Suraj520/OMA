@@ -24,3 +24,10 @@
 --input_arrays="im0" \
 --quantize_to_float16=true \
  --post_training_quantize=true
+
+./toco --input_file="/home/luca/Scrivania/OMA/optimizations/converted_model.tflite" \
+--input_format="TFLITE" \
+--input_shapes="1,448,640,3" \
+--output_file="/home/luca/Scrivania/OMA/optimizations/conv.tflite" \
+--output_arrays="PSD/resize_images_2/ResizeBilinear" \
+--input_arrays="im0" \

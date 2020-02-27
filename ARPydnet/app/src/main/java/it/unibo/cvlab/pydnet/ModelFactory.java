@@ -49,7 +49,7 @@ public class ModelFactory {
 
     private Model createLitePydnetPP(){
         Model pydnetPP;
-        pydnetPP = new TensorflowLiteModel(context, GeneralModel.PYDNET_PP, "Pydnet++", "pydnet_height_latency.tflite");
+        pydnetPP = new TensorflowLiteModel(context, GeneralModel.PYDNET_PP, "Pydnet++", "pydnet_height_default.tflite");
 
         //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
         //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.

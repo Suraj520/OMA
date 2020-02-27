@@ -92,7 +92,7 @@ input_shapes = {'im0': [1,448,640,3]}
 #converter.experimental_new_converter = True
 
 #Latency
-converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]
 #converter.experimental_new_converter = True
 
 #Ottimizzazione Full Integer: Ha bisogno di un dataset rappresentativo.
