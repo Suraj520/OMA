@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 29
-    buildToolsVersion "29.0.2"
+    buildToolsVersion "29.0.3"
     defaultConfig {
         applicationId "it.unibo.arpydnet"
         minSdkVersion 27
@@ -45,8 +45,11 @@ dependencies {
 
     //Tensorflow: per ora la GPU non è supportata.
     //implementation 'org.tensorflow:tensorflow-android:1.13.1'
-    implementation 'org.tensorflow:tensorflow-lite:2.1.0'
-    //implementation 'org.tensorflow:tensorflow-lite-gpu:2.1.0'
+//    implementation 'org.tensorflow:tensorflow-lite:2.1.0'
+//    implementation 'org.tensorflow:tensorflow-lite-gpu:2.1.0'
+
+    implementation(name:'tensorflow-lite', ext:'aar')
+    implementation(name:'tensorflow-lite-gpu', ext:'aar')
 
     // ARCore library
     // Dependency version is rewritten at build time.

@@ -20,12 +20,10 @@ limitations under the License.
 package it.unibo.cvlab.pydnet;
 
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.util.Log;
 
 import java.nio.FloatBuffer;
-import java.util.Arrays;
 import java.util.List;
 
 import it.unibo.cvlab.Runner;
@@ -38,7 +36,7 @@ public class ColorMapper {
 
     private final float scaleFactor;
     private final boolean applyColorMap;
-    private final List<String> colorMap;
+    private final int[] colorMap;
     private int[] output;
     private boolean isPrepared = false;
     private Runner[] pool;
@@ -47,11 +45,19 @@ public class ColorMapper {
     public ColorMapper(float scaleFactor, boolean applyColorMap, int poolSize){
         this.scaleFactor = scaleFactor;
         this.applyColorMap = applyColorMap;
-        this.colorMap = Utils.getPlasma();
+
+        int i = 0;
+
+        List<String> plasma = Utils.getPlasma();
+        this.colorMap = new int[plasma.size()];
+
+        for(String color : plasma){
+            colorMap[i++] = Color.parseColor(color);
+        }
 
         pool = new Runner[poolSize];
 
-        for (int i = 0; i < poolSize; i++) {
+        for (i = 0; i < poolSize; i++) {
             pool[i] = new Runner();
             pool[i].start();
         }
@@ -69,7 +75,6 @@ public class ColorMapper {
         isPrepared = true;
     }
 
-
     public Bitmap getColorMap(final FloatBuffer inference, int numberThread) {
         if (!isPrepared) {
             throw new RuntimeException("ColorMapper is not prepared.");
@@ -82,7 +87,7 @@ public class ColorMapper {
         inference.rewind();
 
         int inferenceLength = inference.remaining();
-        int length = Math.round(inferenceLength / numberThread);
+        int length = Math.round(inferenceLength / (float)numberThread);
 
         for (int index = 0; index < numberThread; index++) {
             int current_start = index*length;
@@ -96,37 +101,10 @@ public class ColorMapper {
                 for(int i = curStart; i < curEnd; i++){
                     float prediction = inference.get(i);
 
-//                    if(Arrays.binarySearch(strange, i) > 0){
-//                        //Valore strano: debug
-//                        int x = i % resolution.getWidth();
-//                        int y = (i-x)/resolution.getWidth();
-//                        Log.d(TAG, "Strange: "+x+","+y);
-//                        Log.d(TAG, "Value: "+prediction);
-//                    }
-
                     if(applyColorMap){
                         int colorIndex =  (int)(prediction * scaleFactor);
-
-//                        if(colorIndex < 0){
-//                            int x = i % resolution.getWidth();
-//                            int y = (i-x)/resolution.getWidth();
-//                            Log.d(TAG, "Strange: "+x+","+y);
-//                            Log.d(TAG, "ColorIndex: "+colorIndex);
-//                        }
-
-
-                        colorIndex = Math.min(Math.max(colorIndex, 0), colorMap.size() - 1);
-
-                        String s = colorMap.get(colorIndex);
-
-//                        if(s.equals("#0D0887")){
-//                            int x = i % resolution.getWidth();
-//                            int y = (i-x)/resolution.getWidth();
-//                            Log.d(TAG, "Strange: "+x+","+y);
-//                            Log.d(TAG, "Value: "+prediction);
-//                        }
-
-                        output[i] = Color.parseColor(s);
+                        colorIndex = Math.min(Math.max(colorIndex, 0), colorMap.length - 1);
+                        output[i] = colorMap[colorIndex];
                     } else{
                         output[i] =  (int) (prediction * scaleFactor);
                     }
@@ -138,11 +116,6 @@ public class ColorMapper {
         try {
             for (Runner thread : pool)
                 thread.waitJob();
-
-
-//            Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-//            bmp.setPixels(output, 0, width, 0, 0, resolution.getWidth(), resolution.getHeight());
-//            bmp.setPixels(output, (resolution.getWidth() * (height-resolution.getHeight())), width, 0, resolution.getHeight(),  resolution.getWidth(), height-resolution.getHeight());
 
             Bitmap bmp = Bitmap.createBitmap(resolution.getWidth(), resolution.getHeight(), Bitmap.Config.ARGB_8888);
             bmp.setPixels(output, 0, resolution.getWidth(), 0, 0, resolution.getWidth(), resolution.getHeight());
@@ -157,58 +130,4 @@ public class ColorMapper {
 
     }
 
-    public void getColorMap(Bitmap toCopy, final FloatBuffer inference, int numberThread) {
-        if (!isPrepared) {
-            throw new RuntimeException("ColorMapper is not prepared.");
-        }
-
-        if(toCopy.getWidth() != resolution.getWidth() || toCopy.getHeight() != resolution.getHeight()){
-            throw new RuntimeException("Bitmap don't match resolution");
-        }
-
-
-        if(pool.length < numberThread){
-            numberThread = pool.length;
-        }
-
-        inference.rewind();
-
-        int inferenceLength = inference.remaining();
-        int length = Math.round(inferenceLength / numberThread);
-
-        for (int index = 0; index < numberThread; index++) {
-            int current_start = index*length;
-            int current_end = current_start + length;
-            current_end = Math.min(current_end, inferenceLength);
-
-            final int curStart = current_start;
-            final int curEnd = current_end;
-
-            pool[index].doJob(()->{
-                for(int i = curStart; i < curEnd; i++){
-                    float prediction = inference.get(i);
-
-                    if(applyColorMap){
-                        int colorIndex =  (int)(prediction * scaleFactor);
-                        colorIndex = Math.min(Math.max(colorIndex, 0), colorMap.size() - 1);
-                        output[i] = Color.parseColor(colorMap.get(colorIndex));
-                    } else{
-                        output[i] =  (int) (prediction * scaleFactor);
-                    }
-
-                }
-            });
-        }
-
-        try {
-            for (Runner thread : pool)
-                thread.waitJob();
-
-            toCopy.setPixels(output, 0, resolution.getWidth(), 0, 0, resolution.getWidth(), resolution.getHeight());
-        }
-        catch (InterruptedException e){
-            Log.d(TAG, "Thread Interrotto nel join", e);
-        }
-
-    }
 }

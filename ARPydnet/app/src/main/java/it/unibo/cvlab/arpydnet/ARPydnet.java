@@ -54,6 +54,7 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 
@@ -118,8 +119,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private static int NUMBER_THREADS = Runtime.getRuntime().availableProcessors();
     private static final float OBJ_SCALE_FACTOR = 1.0f;
 
-    private Model currentModel;
-    private FloatBuffer inference;
+    private Model currentModel = null;
+    private FloatBuffer inference = null;
+    private ByteBuffer rawInference = null;
 
     //Usato per far girare pydnet in un altro thread.
     private Handler inferenceHandler;
@@ -130,7 +132,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     //Qui parametri fissi della pydnet: dipendono dal modello caricato.
     private static final Utils.Resolution RESOLUTION = Utils.Resolution.RES4;
-    private static final Utils.Scale SCALE = Utils.Scale.HALF;
+    private static final Utils.Scale SCALE = Utils.Scale.HEIGHT;
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
     private static final float COLOR_SCALE_FACTOR = 10.5f;
     private static final int QUANTIZER_LEVELS = 64;
@@ -165,6 +167,25 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     }
 
     private final ArrayList<ColoredAnchor> anchors = new ArrayList<>();
+
+    private void prepareModel(){
+        if(currentModel == null){
+            //Pydnet: ricavo il modello.
+            //Oggetti per la pydnet
+            //TODO: Da spostare nel GL context 3.1 quando capisci come fare...
+            ModelFactory modelFactory = new ModelFactory(getApplicationContext());
+            currentModel = modelFactory.getModel(0);
+            currentModel.prepare(RESOLUTION);
+//            currentModel.preparePool(NUMBER_THREADS);
+        }
+    }
+
+    private void disposeModel(){
+        if(currentModel != null){
+            currentModel.dispose();
+            currentModel = null;
+        }
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -202,7 +223,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
 
         //Attivo il depth solo se non siamo in dual mode.
-//        optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
+        optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
 
         optionsToolbar.setOnMenuItemClickListener(item -> {
 
@@ -238,11 +259,13 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
 
                     //Attivo il depth solo se non siamo in dual mode.
-//                    optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
+                    optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
 
                     onSessionPause();
                     session.close();
                     session = null;
+
+//                    disposeModel();
 
                     //Cambio il fragment.
 
@@ -259,6 +282,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                         currentFragment = singleFragment;
                     }
+
+//                    prepareModel();
 
                     onSessionResume();
 
@@ -277,6 +302,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         onSessionPause();
                         session.close();
                         session = null;
+
+//                        disposeModel();
+//                        prepareModel();
+
                         onSessionResume();
                     }
 
@@ -287,12 +316,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
         });
 
-        //Pydnet: ricavo il modello.
-        //Oggetti per la pydnet
-        //TODO: Da spostare nel GL context 3.1 quando capisci come fare...
-        ModelFactory modelFactory = new ModelFactory(getApplicationContext());
-        currentModel = modelFactory.getModel(0);
-        currentModel.prepare(RESOLUTION);
+        prepareModel();
 
         calibrator = new Calibrator(MAPPER_SCALE_FACTOR, RESOLUTION, NUMBER_THREADS);
 
@@ -406,8 +430,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         }
 
         super.onPause();
-
-
     }
 
     @Override
@@ -468,8 +490,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
             pointerRenderer.createOnGlThread(this, "models/mirino.png");
 
-            screenshotRenderer.createOnGlThread(this);
-            screenshotRenderer.updateScaledFrameBuffer(RESOLUTION);
+            screenshotRenderer.createOnGlThread(this, RESOLUTION);
 
             ShaderUtil.checkGLError(TAG, "OnSurfaceCreated");
 
@@ -601,7 +622,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 if (depthColorEnabled || dualScreenMode) {
                     Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
 
-
                     if(depthColorEnabled){
                         backgroundRenderer.loadDepthColorImage(bitmapDepthColor);
 
@@ -638,22 +658,26 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 //Profile: 100 ms
                 //Vecchio metodo: 160 ms
 
-                long nanos = SystemClock.elapsedRealtime();
+//                long nanos = SystemClock.elapsedRealtime();
                 //20 ms
                 int[] screenshot = screenshotRenderer.screenshot();
 
-                Log.d(TAG, "screenshot take: " + (SystemClock.elapsedRealtime()-nanos));
-                nanos = SystemClock.elapsedRealtime();
+//                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
+//                nanos = SystemClock.elapsedRealtime();
 
                 //80 ms
                 currentModel.loadInput(screenshot);
-                Log.d(TAG, "LoadInput take: " + (SystemClock.elapsedRealtime()-nanos));
+//                Log.d(TAG, "LoadInput takes: " + (SystemClock.elapsedRealtime()-nanos));
 
                 //Posso far partire il modello.
                 isProcessingFrame = true;
 
                 runInBackground(() -> {
-                    inference = currentModel.doInference(SCALE);
+                    long nanos = SystemClock.elapsedRealtime();
+                    rawInference = currentModel.doRawInference(SCALE);
+                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos));
+
+                    inference = rawInference.asFloatBuffer();
                     isProcessingFrame = false;
                 });
             }

@@ -2,7 +2,6 @@ package it.unibo.cvlab.arpydnet;
 
 import android.content.Context;
 import android.opengl.GLES30;
-import android.opengl.GLES30;
 import android.util.Log;
 
 import com.google.ar.core.examples.java.common.rendering.ShaderUtil;
@@ -13,7 +12,6 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-import it.unibo.cvlab.pydnet.Model;
 import it.unibo.cvlab.pydnet.Utils;
 
 public class ScreenshotRenderer {
@@ -86,45 +84,10 @@ public class ScreenshotRenderer {
     private int[] pixelData;
     private IntBuffer pixelDataBuffer;
 
-//    private ByteBuffer pixelDataBuffer;
 
     public void onSurfaceChanged(int width, int height){
         surfaceWidth = width;
         surfaceHeight = height;
-    }
-
-    public void updateScaledFrameBuffer(Utils.Resolution res){
-        updateScaledFrameBuffer(res.getWidth(), res.getHeight());
-    }
-
-    public void updateScaledFrameBuffer(int width, int height){
-        this.scaledWidth = width;
-        this.scaledHeight = height;
-
-        pixelData = new int[width * height];
-        pixelDataBuffer = IntBuffer.wrap(pixelData);
-
-//        pixelDataBuffer = IntBuffer.allocate(width * height);
-//        pixelDataBuffer = ByteBuffer.allocate(width * height * 3);
-//        pixelDataBuffer.order(ByteOrder.nativeOrder());
-
-        //Devo aggiornare anche la texture associata al framebuffer
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScaledScreenshotFrameBuffer());
-
-        int textureTarget = GLES30.GL_TEXTURE_2D;
-
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(textureTarget, getScaledColorFrameBufferTextureId());
-
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        //Salvo il buffer finale come float così non devo fare altre conversioni.
-        //Se voglio creare un byte buffer RGB senza alpha usa GL_RGBA
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
-
-        ShaderUtil.checkGLError(TAG, "Framebuffer texture allocate");
-
-        GLES30.glBindTexture(textureTarget, 0);
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
     }
 
     /**
@@ -133,40 +96,53 @@ public class ScreenshotRenderer {
      *
      * @param context Needed to access shader source.
      */
-    public void createOnGlThread(Context context) throws IOException {
-        // Generate the textures.
-        GLES30.glGenTextures(textures.length, textures, 0);
+    public void createOnGlThread(Context context, Utils.Resolution res) throws IOException {
+        this.scaledWidth = res.getWidth();
+        this.scaledHeight = res.getHeight();
 
-        int textureTarget = GLES30.GL_TEXTURE_2D;
+        //Buffer dove mettere i dati dello screenshot.
+        pixelData = new int[scaledHeight * scaledWidth];
+        pixelDataBuffer = IntBuffer.wrap(pixelData);
+
+        //Una già generata in precedenza
+        GLES30.glGenTextures(textures.length - 1, textures, 0);
 
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(textureTarget, getScaledColorFrameBufferTextureId());
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId());
 
-        GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
-        GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
 
-        GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
-        GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
 
-        GLES30.glBindTexture(textureTarget, 0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
 
         //Creazione del framebuffer per il rendering alternativo alla finestra.
-        //Ho bisogno anche di una texture aggiuntiva dove salvare il rendering
+        //Ho bisogno anche di un renderbuffer aggiuntivo dove salvare il rendering
         GLES30.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
+
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScaledScreenshotFrameBuffer());
 
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(textureTarget, getScaledColorFrameBufferTextureId());
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId());
+
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        //Salvo il buffer finale come float così non devo fare altre conversioni.
+        //Se voglio creare un byte buffer RGB senza alpha usa GL_RGBA
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, scaledWidth, scaledHeight, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
 
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId(), 0);
 
         if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
             Log.d(TAG, "Framebuffer caricato correttamente");
+        }else{
+            throw new RuntimeException("Impossibile carica il framebuffer");
         }
 
-        GLES30.glBindTexture(textureTarget, 0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "Framebuffer loading");

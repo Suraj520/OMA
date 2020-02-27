@@ -20,44 +20,49 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TensorflowLiteModel extends Model{
 
     private static final String TAG = TensorflowLiteModel.class.getSimpleName();
 
+    private static final int DATA_SIZE = 4;
+
     protected Interpreter tfLite;
-    private int[] intInputPixels;
     private boolean isPrepared = false;
 
 
     public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
         super(context, generalModel, name, checkpoint);
 
-
-        //Ora la GPU non è supportata.
-        GpuDelegate delegate = new GpuDelegate();
-
-//        Interpreter.Options tfliteOptions = new Interpreter.Options().addDelegate(delegate);
-
         Interpreter.Options tfliteOptions = new Interpreter.Options();
 
         //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
-        //e cerco di usare le API di Android per ANN.
-        // Initialize interpreter with NNAPI delegate for Android Pie or above
-//        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-//            NnApiDelegate nnApiDelegate = new NnApiDelegate();
-//            tfliteOptions.addDelegate(nnApiDelegate);
-//        }
-
         tfliteOptions.setAllowFp16PrecisionForFp32(true);
         tfliteOptions.setNumThreads(4);
-//        tfliteOptions.setUseNNAPI(true);
+
+//        addGPUDelegate(tfliteOptions);
+//        addNNAPIDelegate(tfliteOptions);
 
         try {
             MappedByteBuffer buffer = loadModelFile(context.getAssets(), checkpoint);
             this.tfLite = new Interpreter(buffer, tfliteOptions);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void addGPUDelegate(Interpreter.Options options){
+        GpuDelegate delegate = new GpuDelegate();
+        options.addDelegate(delegate);
+    }
+
+    private void addNNAPIDelegate(Interpreter.Options options){
+        // Initialize interpreter with NNAPI delegate for Android Pie or above
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            NnApiDelegate nnApiDelegate = new NnApiDelegate();
+            options.addDelegate(nnApiDelegate);
         }
     }
 
@@ -71,11 +76,10 @@ public class TensorflowLiteModel extends Model{
         this.resolution = resolution;
 
         //RGB: per ogni canale un float (4 byte) il tutto va moltiplicato per il numero di pixel (W*H)
-        input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * 4);
+        input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
+
         //Qui ho solo il canale di profondità: restituisce un float di distanza per ogni pixel.
-        inference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * 4);
-        //Questo è utilizzato per ricavare i canali dell'immagine.
-        intInputPixels = new int[resolution.getWidth() * resolution.getHeight()];
+        inference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
 
         input.order(ByteOrder.nativeOrder());
         inference.order(ByteOrder.nativeOrder());
@@ -111,6 +115,8 @@ public class TensorflowLiteModel extends Model{
      * @param bitmap Immagine da inserire.
      */
     private void fillInputByteBufferWithBitmap(Bitmap bitmap) {
+        //Questo è utilizzato per ricavare i canali dell'immagine.
+        int[] intInputPixels = new int[bitmap.getWidth() * bitmap.getHeight()];
         bitmap.getPixels(intInputPixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
         fillInputWithData(intInputPixels);
     }
@@ -126,9 +132,28 @@ public class TensorflowLiteModel extends Model{
                 final int val = data[pixel++];
 
                 //Ogni pixel viene normalizzato e passato come float32.
+                //Si potrebbe rimuovere >>16 se si mette alpha 0
                 input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
                 input.putFloat((((val >> 8) & 0xFF))/255.0f);
                 input.putFloat((((val) & 0xFF))/255.0f);
+            }
+        }
+    }
+
+    public void loadInput(ByteBuffer data){
+        input.rewind();
+        data.rewind();
+
+        // Convert the image to floating point.
+        final int width = resolution.getWidth();
+        final int height = resolution.getHeight();
+
+        for (int j = 0; j < height ; ++j) {
+            for (int i = 0; i < width; ++i) {
+                //Ogni pixel viene normalizzato e passato come float32.
+                input.putFloat(data.get()/ 255.0f);
+                input.putFloat(data.get()/255.0f);
+                input.putFloat(data.get()/255.0f);
             }
         }
     }
@@ -155,6 +180,11 @@ public class TensorflowLiteModel extends Model{
 
     @NonNull
     public FloatBuffer doInference(Utils.Scale scale){
+        return doRawInference(scale).asFloatBuffer();
+    }
+
+    @NonNull
+    public ByteBuffer doRawInference(Utils.Scale scale){
         if (!isPrepared) {
             throw new RuntimeException("Model is not prepared.");
         }
@@ -162,13 +192,19 @@ public class TensorflowLiteModel extends Model{
         input.rewind();
         inference.rewind();
 
-        //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
-        //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.
-        this.tfLite.run(input, inference);
+//        Object[] inputArray = new Object[tfLite.getInputTensorCount()];
+//        inputArray[tfLite.getInputIndex(getInputNode("image"))] = input;
+//
+//        Map<Integer, Object> outputMap = new HashMap<>();
+//        outputMap.put(tfLite.getOutputIndex(outputNodes.get(scale)), inference);
+//
+//        tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
+
+        tfLite.run(input, inference);
 
         inference.rewind();
 
-        return inference.asFloatBuffer();
+        return inference;
     }
 
     // Helper static methods
@@ -194,5 +230,10 @@ public class TensorflowLiteModel extends Model{
         long declaredLength = fileDescriptor.getDeclaredLength();
 
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    }
+
+    public void dispose(){
+        super.dispose();
+        tfLite.close();
     }
 }

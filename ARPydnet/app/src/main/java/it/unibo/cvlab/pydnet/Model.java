@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import it.unibo.cvlab.Runner;
 import it.unibo.cvlab.pydnet.Utils.*;
 
 public abstract class Model{
@@ -163,6 +164,17 @@ public abstract class Model{
 
     protected Resolution resolution;
 
+    protected Runner[] pool;
+
+    public void preparePool(int poolSize){
+        pool = new Runner[poolSize];
+
+        for (int i = 0; i < poolSize; i++) {
+            pool[i] = new Runner();
+            pool[i].start();
+        }
+    }
+
     public Model(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
         this.prepared = false;
         this.generalModel = generalModel;
@@ -196,19 +208,24 @@ public abstract class Model{
 
     public abstract void loadInput(Bitmap input);
     public abstract void loadInput(int[] data);
+    public abstract void loadInput(ByteBuffer data);
     public abstract void loadInput(IntBuffer data);
 
-    public void loadDirect(ByteBuffer input){
-        this.input = input;
-    }
-
-    public void loadDirectDuplicate(ByteBuffer input){
-        this.input = input.duplicate();
-    }
 
     public abstract FloatBuffer doInference(Utils.Scale scale);
+    public abstract ByteBuffer doRawInference(Utils.Scale scale);
 
-
+    public void dispose(){
+        if(pool != null && pool.length > 0){
+            try {
+                for (Runner runner : pool) {
+                    runner.stop();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }
 
 

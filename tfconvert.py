@@ -73,7 +73,7 @@ input_tensors = [input_tensor]
 output_tensors = [out_tensor_height]
 
 
-#converter = tf.compat.v1.lite.TFLiteConverter.from_session(session, input_tensors, output_tensors)
+converter = tf.compat.v1.lite.TFLiteConverter.from_session(session, input_tensors, output_tensors)
 
 #-----------------------------------------------------------------------
 
@@ -83,11 +83,17 @@ input_tensors = ["im0"]
 output_tensors = ["PSD/resize_images_2/ResizeBilinear"]
 input_shapes = {'im0': [1,448,640,3]}
 
-converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, input_tensors, output_tensors, input_shapes)
+#converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, input_tensors, output_tensors, input_shapes)
+
+#-----------------------------------------------------------------------
 
 #Default
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.experimental_new_converter = True
+#converter.optimizations = [tf.lite.Optimize.DEFAULT]
+#converter.experimental_new_converter = True
+
+#Latency
+converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+#converter.experimental_new_converter = True
 
 #Ottimizzazione Full Integer: Ha bisogno di un dataset rappresentativo.
 #converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -95,9 +101,10 @@ converter.experimental_new_converter = True
 #converter.experimental_new_quantizer = True
 #converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
 #converter.inference_input_type = tf.uint8
-#converter.inference_output_type = tf.uint8
+#converter.inference_output_type = tf.float32
 #converter.inference_type = tf.uint8
 #converter.quantized_input_stats = {"im0": (0.0, 255.0)}
+#converter.default_ranges_stats = (0.0, 25.0)
 
 #FLOAT16 optimization
 #converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -106,4 +113,4 @@ converter.experimental_new_converter = True
 
 #Conversione vera e propria
 tflite_model = converter.convert()
-open("converted_model.tflite", "wb").write(tflite_model)
+open("optimizations/converted_model.tflite", "wb").write(tflite_model)
