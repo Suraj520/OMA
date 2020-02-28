@@ -658,19 +658,19 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 //Profile: 100 ms
                 //Vecchio metodo: 160 ms
 
-                long nanos = SystemClock.elapsedRealtime();
+//                long nanos = SystemClock.elapsedRealtime();
 
                 screenshotRenderer.screenshot(currentModel);
 
-                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
+//                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
 
                 //Posso far partire il modello.
                 isProcessingFrame = true;
 
                 runInBackground(() -> {
-//                    long nanos = SystemClock.elapsedRealtime();
+//                    long nanos2 = SystemClock.elapsedRealtime();
                     rawInference = currentModel.doRawInference(SCALE);
-//                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos));
+//                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos2));
 
                     inference = rawInference.asFloatBuffer();
                     isProcessingFrame = false;
