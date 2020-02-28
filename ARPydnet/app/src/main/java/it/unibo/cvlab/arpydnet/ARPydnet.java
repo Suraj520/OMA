@@ -511,7 +511,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         dualFragment.onSurfaceChanged(width, height, RESOLUTION);
 
         //Lo faccio qui dove il background renderer ha già istanziato la texture necessaria all'altro programma.
-        screenshotRenderer.setColorFrameBufferTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
+        screenshotRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
 
         GLES20.glViewport(0, 0, width, height);
     }
@@ -658,16 +658,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 //Profile: 100 ms
                 //Vecchio metodo: 160 ms
 
-//                long nanos = SystemClock.elapsedRealtime();
-                //20 ms
-                int[] screenshot = screenshotRenderer.screenshot();
+                long nanos = SystemClock.elapsedRealtime();
 
-//                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
-//                nanos = SystemClock.elapsedRealtime();
+                screenshotRenderer.screenshot(currentModel);
 
-                //80 ms
-                currentModel.loadInput(screenshot);
-//                Log.d(TAG, "LoadInput takes: " + (SystemClock.elapsedRealtime()-nanos));
+                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
 
                 //Posso far partire il modello.
                 isProcessingFrame = true;

@@ -7,11 +7,12 @@ import android.util.Log;
 import com.google.ar.core.examples.java.common.rendering.ShaderUtil;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 
+import it.unibo.cvlab.pydnet.Model;
 import it.unibo.cvlab.pydnet.Utils;
 
 public class ScreenshotRenderer {
@@ -58,31 +59,47 @@ public class ScreenshotRenderer {
     //Riferimento alle coordinate delle texture.
     private int texCoordAttribute;
 
-    private int[] textures = new int[2];
+    private int[] textures = new int[1];
 
-    private int getScaledColorFrameBufferTextureId(){
+    public void setSourceTextureId(int id){
+        textures[0] = id;
+    }
+
+    private int getSourceTextureId(){
         return textures[0];
-    }
-
-    public void setColorFrameBufferTextureId(int id){
-        textures[1] = id;
-    }
-
-    private int getColorFrameBufferTextureId(){
-        return textures[1];
     }
 
     private int[] frameBuffers = new int[1];
 
-    private int getScaledScreenshotFrameBuffer(){
+    private int getScreenshotFrameBuffer(){
         return frameBuffers[0];
+    }
+
+    private int[] renderBuffers = new int[1];
+
+    private int getScreenshotRenderBuffer(){
+        return renderBuffers[0];
+    }
+
+    private int[] pixelBuffers = new int[2];
+
+    private int getScreenshotPixelBufferEven(){
+        return pixelBuffers[0];
+    }
+
+    private int getScreenshotPixelBufferOdd(){
+        return pixelBuffers[1];
     }
 
     private int surfaceWidth, surfaceHeight;
     private int scaledWidth, scaledHeight;
 
-    private int[] pixelData;
-    private IntBuffer pixelDataBuffer;
+//    private int[] pixelData;
+//    private IntBuffer pixelDataBuffer;
+
+    private int bufferLength;
+
+    private int index = 0;
 
 
     public void onSurfaceChanged(int width, int height){
@@ -99,53 +116,46 @@ public class ScreenshotRenderer {
     public void createOnGlThread(Context context, Utils.Resolution res) throws IOException {
         this.scaledWidth = res.getWidth();
         this.scaledHeight = res.getHeight();
+        this.bufferLength = scaledHeight * scaledWidth * 3;
 
         //Buffer dove mettere i dati dello screenshot.
-        pixelData = new int[scaledHeight * scaledWidth];
-        pixelDataBuffer = IntBuffer.wrap(pixelData);
+//        pixelData = new int[scaledHeight * scaledWidth];
+//        pixelDataBuffer = IntBuffer.wrap(pixelData);
 
-        //Una già generata in precedenza
-        GLES30.glGenTextures(textures.length - 1, textures, 0);
+        //Genero il renderbuffer dove salvare lo screenshot.
 
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId());
+        GLES30.glGenRenderbuffers(renderBuffers.length, renderBuffers, 0);
+        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
+        GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_RGB8, scaledWidth, scaledHeight);
+        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, 0);
 
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
-
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
-
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
-
-        ShaderUtil.checkGLError(TAG, "Texture loading");
+        ShaderUtil.checkGLError(TAG, "RenderBuffer loading");
 
         //Creazione del framebuffer per il rendering alternativo alla finestra.
         //Ho bisogno anche di un renderbuffer aggiuntivo dove salvare il rendering
         GLES30.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
-
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScaledScreenshotFrameBuffer());
-
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId());
-
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-        //Salvo il buffer finale come float così non devo fare altre conversioni.
-        //Se voglio creare un byte buffer RGB senza alpha usa GL_RGBA
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, scaledWidth, scaledHeight, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
-
-        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, getScaledColorFrameBufferTextureId(), 0);
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+        GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
 
         if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
             Log.d(TAG, "Framebuffer caricato correttamente");
         }else{
-            throw new RuntimeException("Impossibile carica il framebuffer");
+            throw new RuntimeException("Impossibile caricare il framebuffer");
         }
 
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
+        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, 0);
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "Framebuffer loading");
+
+        //Genero il Pixel Buffer Object per ottimizzare
+        GLES30.glGenBuffers(pixelBuffers.length, pixelBuffers, 0);
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, getScreenshotPixelBufferEven());
+        GLES30.glBufferData(GLES30.GL_PIXEL_PACK_BUFFER, bufferLength, null, GLES30.GL_STREAM_READ);
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, getScreenshotPixelBufferOdd());
+        GLES30.glBufferData(GLES30.GL_PIXEL_PACK_BUFFER, bufferLength, null, GLES30.GL_STREAM_READ);
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
+
 
         int numVertices = 4;
 
@@ -198,11 +208,11 @@ public class ScreenshotRenderer {
     //Per la modifica in ByteBuffer
     //Restituisci ByteBuffer. Controlla che sia sufficientemente grande.
 
-    public int[] screenshot(){
+    public void screenshot(Model model){
         // Ensure position is rewound before use.
         screenshotCoordsBuffer.position(0);
         screenshotTexCoordsBuffer.position(0);
-        pixelDataBuffer.position(0);
+//        pixelDataBuffer.position(0);
 
         // No need to test or write depth, the screen quad has arbitrary depth, and is expected
         // to be drawn first.
@@ -215,7 +225,7 @@ public class ScreenshotRenderer {
         GLES30.glUniform1i(textureUniform, 1);
 
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getColorFrameBufferTextureId());
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getSourceTextureId());
 
         // Set the vertex positions.
         GLES30.glVertexAttribPointer(
@@ -229,18 +239,9 @@ public class ScreenshotRenderer {
         GLES30.glEnableVertexAttribArray(positionAttribute);
         GLES30.glEnableVertexAttribArray(texCoordAttribute);
 
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScaledScreenshotFrameBuffer());
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
         GLES30.glViewport(0, 0, scaledWidth, scaledHeight);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
-
-        //Se voglio creare un byte buffer RGB senza alpha usa glPixelStorei
-//        GLES30.glPixelStorei(GLES30.GL_PACK_ALIGNMENT, 1);
-
-        // Read the pixels from framebuffer.
-        GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixelDataBuffer);
-
-//        GLES30.glPixelStorei(GLES30.GL_PACK_ALIGNMENT, 4);
 
         GLES30.glViewport(0, 0, surfaceWidth, surfaceHeight);
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
@@ -261,7 +262,42 @@ public class ScreenshotRenderer {
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererDraw");
 
-        return pixelData;
+        //http://www.songho.ca/opengl/gl_pbo.html
+        //Update index
+        index = (index + 1) % 2;
+        int nextIndex = (index + 1) % 2;
+
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pixelBuffers[index]);
+
+        //Read from pixel buffer
+        GLES30.glReadBuffer(GLES30.GL_COLOR_ATTACHMENT0);
+
+        // Read the pixels from pixel buffer.
+        //Se voglio creare un byte buffer RGB senza alpha usa glPixelStorei
+        GLES30.glPixelStorei(GLES30.GL_PACK_ALIGNMENT, 1);
+        GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,
+                GLES30.GL_RGB, GLES30.GL_UNSIGNED_BYTE, 0);
+        GLES30.glPixelStorei(GLES30.GL_PACK_ALIGNMENT, 4);
+
+        //Mappo il prossimo pixel buffer, da convertire per il modello.
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pixelBuffers[nextIndex]);
+
+        final Buffer rawBuffer = GLES30.glMapBufferRange(GLES30.GL_PIXEL_PACK_BUFFER, 0, bufferLength, GLES30.GL_MAP_READ_BIT);
+
+        //https://stackoverflow.com/questions/29921348/safe-usage-of-glmapbufferrange-on-android-java
+        if(rawBuffer != null){
+            ByteBuffer byteBuffer = (ByteBuffer) rawBuffer;
+            model.loadInput(byteBuffer);
+        }
+
+        //Restoring
+        GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
+        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+        GLES30.glReadBuffer(GLES30.GL_BACK);
+
+        ShaderUtil.checkGLError(TAG, "Screenshot");
     }
 
 }

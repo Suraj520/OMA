@@ -343,4 +343,13 @@ public class Utils {
 
         return color;
     }
+
+    public static final float[] FAST_CONV = new float[256];
+
+    static {
+        for (int i = 0; i < FAST_CONV.length; i++) {
+            FAST_CONV[i] = i / 255.0f;
+        }
+    }
+
 }

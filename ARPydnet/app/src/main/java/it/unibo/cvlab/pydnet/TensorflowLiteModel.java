@@ -20,14 +20,57 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Map;
 
 public class TensorflowLiteModel extends Model{
 
     private static final String TAG = TensorflowLiteModel.class.getSimpleName();
 
     private static final int DATA_SIZE = 4;
+
+    static{
+        System.loadLibrary("native-norm");
+    }
+
+    public static void fillWithData(int[] in, int width, int height, ByteBuffer out){
+        out.rewind();
+
+        final int length = width*height;
+        for (int i = 0; i < length ; ++i) {
+            final int val = in[i];
+            out.putFloat((((val >> 16) & 0xFF))/ 255.0f);
+            out.putFloat((((val >> 8) & 0xFF))/255.0f);
+            out.putFloat((((val) & 0xFF))/255.0f);
+        }
+
+        out.rewind();
+    }
+
+    public static void fillWithBuffer(IntBuffer in, int width, int height, ByteBuffer out){
+        out.rewind();
+        in.rewind();
+
+        final int length = width*height;
+        for (int i = 0; i < length ; ++i) {
+            final int val = in.get();
+            out.putFloat((((val >> 16) & 0xFF))/ 255.0f);
+            out.putFloat((((val >> 8) & 0xFF))/255.0f);
+            out.putFloat((((val) & 0xFF))/255.0f);
+        }
+
+        out.rewind();
+        in.rewind();
+    }
+
+    public static void fillWithBuffer(ByteBuffer in,  ByteBuffer out){
+        in.order(ByteOrder.nativeOrder());
+        out.order(ByteOrder.nativeOrder());
+
+        RGBbufferNormalization(in, out, in.remaining(), out.remaining());
+    }
+
+    private static native int RGBbufferNormalization(ByteBuffer in, ByteBuffer out, int inLength, int outLength);
+    private static native int RGBAbufferNormalization(ByteBuffer in, ByteBuffer out, int inLength, int outLength);
+    private static native int ARGBbufferNormalization(ByteBuffer in, ByteBuffer out, int inLength, int outLength);
 
     protected Interpreter tfLite;
     private boolean isPrepared = false;
@@ -94,9 +137,7 @@ public class TensorflowLiteModel extends Model{
             throw new RuntimeException("Model is not prepared.");
         }
 
-        input.rewind();
         fillInputByteBufferWithBitmap(bmp);
-        input.rewind();
     }
 
     public void loadInput(int[] data){
@@ -104,9 +145,7 @@ public class TensorflowLiteModel extends Model{
             throw new RuntimeException("Model is not prepared.");
         }
 
-        input.rewind();
         fillInputWithData(data);
-        input.rewind();
     }
 
     /**
@@ -126,56 +165,28 @@ public class TensorflowLiteModel extends Model{
         final int width = resolution.getWidth();
         final int height = resolution.getHeight();
 
-        int pixel = 0;
-        for (int j = 0; j < height ; ++j) {
-            for (int i = 0; i < width; ++i) {
-                final int val = data[pixel++];
-
-                //Ogni pixel viene normalizzato e passato come float32.
-                //Si potrebbe rimuovere >>16 se si mette alpha 0
-                input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
-                input.putFloat((((val >> 8) & 0xFF))/255.0f);
-                input.putFloat((((val) & 0xFF))/255.0f);
-            }
-        }
+        fillWithData(data, width, height, input);
     }
 
     public void loadInput(ByteBuffer data){
-        input.rewind();
-        data.rewind();
-
-        // Convert the image to floating point.
-        final int width = resolution.getWidth();
-        final int height = resolution.getHeight();
-
-        for (int j = 0; j < height ; ++j) {
-            for (int i = 0; i < width; ++i) {
-                //Ogni pixel viene normalizzato e passato come float32.
-                input.putFloat(data.get()/ 255.0f);
-                input.putFloat(data.get()/255.0f);
-                input.putFloat(data.get()/255.0f);
-            }
+        if (!isPrepared) {
+            throw new RuntimeException("Model is not prepared.");
         }
+
+
+        fillWithBuffer(data, input);
     }
 
     public void loadInput(IntBuffer data){
-        input.rewind();
-        data.rewind();
+        if (!isPrepared) {
+            throw new RuntimeException("Model is not prepared.");
+        }
 
         // Convert the image to floating point.
         final int width = resolution.getWidth();
         final int height = resolution.getHeight();
 
-        for (int j = 0; j < height ; ++j) {
-            for (int i = 0; i < width; ++i) {
-                final int val = data.get();
-
-                //Ogni pixel viene normalizzato e passato come float32.
-                input.putFloat((((val >> 16) & 0xFF))/ 255.0f);
-                input.putFloat((((val >> 8) & 0xFF))/255.0f);
-                input.putFloat((((val) & 0xFF))/255.0f);
-            }
-        }
+        fillWithBuffer(data, width, height, input);
     }
 
     @NonNull
