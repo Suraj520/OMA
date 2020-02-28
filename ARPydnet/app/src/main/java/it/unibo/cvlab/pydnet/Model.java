@@ -153,7 +153,9 @@ public abstract class Model{
     protected HashMap<String, float[]> results;
     protected HashMap<String, String> inputNodes;
 
+    private ByteBuffer inputBackup;
     protected ByteBuffer input;
+
     protected ByteBuffer inference;
 
     protected boolean prepared;
@@ -211,6 +213,15 @@ public abstract class Model{
     public abstract void loadInput(ByteBuffer data);
     public abstract void loadInput(IntBuffer data);
 
+    public void loadDirect(ByteBuffer input){
+        if(inputBackup == null) inputBackup = this.input;
+        this.input = input;
+    }
+
+    public void restore(){
+        if(inputBackup != null)
+            this.input = inputBackup;
+    }
 
     public abstract FloatBuffer doInference(Utils.Scale scale);
     public abstract ByteBuffer doRawInference(Utils.Scale scale);
