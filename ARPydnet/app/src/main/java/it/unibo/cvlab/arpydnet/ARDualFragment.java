@@ -1,7 +1,6 @@
 package it.unibo.cvlab.arpydnet;
 
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
@@ -16,7 +15,6 @@ import androidx.fragment.app.Fragment;
 import com.google.ar.core.examples.java.common.helpers.TapHelper;
 
 import butterknife.Unbinder;
-import it.unibo.cvlab.pydnet.ImageUtils;
 import it.unibo.cvlab.pydnet.Utils;
 import it.unibo.cvlab.pydnet.demo.OverlayView;
 

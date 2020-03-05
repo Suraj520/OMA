@@ -21,6 +21,8 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TensorflowLiteModel extends Model{
 
@@ -100,7 +102,7 @@ public class TensorflowLiteModel extends Model{
         Interpreter.Options tfliteOptions = new Interpreter.Options();
 
         //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
-        tfliteOptions.setAllowFp16PrecisionForFp32(true);
+//        tfliteOptions.setAllowFp16PrecisionForFp32(true);
         tfliteOptions.setNumThreads(4);
 
 //        addGPUDelegate(tfliteOptions);

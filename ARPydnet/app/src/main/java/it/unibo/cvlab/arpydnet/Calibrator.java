@@ -332,7 +332,7 @@ public class Calibrator {
 //        Log.d(TAG, "Num points: "+numPoints);
 
         //Ho un range di valori per cui accetto la nuvola.
-        if(numPoints < MIN_POINTS) return;
+        if(numPoints < MIN_POINTS && anchors.isEmpty()) return;
 
         numPoints = numPoints > MAX_POINTS ? MAX_POINTS : numPoints;
 

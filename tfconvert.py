@@ -80,7 +80,7 @@ output_tensors = [out_tensor_height]
 #Convertitore da file
 
 input_tensors = ["im0"]
-output_tensors = ["PSD/resize_images_2/ResizeBilinear"]
+output_tensors = ["PSD/resize_images_1/ResizeBilinear"]
 input_shapes = {'im0': [1,448,640,3]}
 
 converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, input_tensors, output_tensors, input_shapes)
@@ -88,8 +88,10 @@ converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, i
 #-----------------------------------------------------------------------
 
 #Default
-#converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
 #converter.experimental_new_converter = True
+converter.quantized_input_stats = {"im0": (0.0, 255.0)}
+converter.default_ranges_stats = (0.0, 25.0)
 
 #Latency
 #converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
@@ -107,11 +109,12 @@ converter = tf.compat.v1.lite.TFLiteConverter.from_frozen_graph(GRAPH_PB_PATH, i
 #converter.default_ranges_stats = (0.0, 25.0)
 
 #FLOAT16 optimization
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.target_spec.supported_types = [tf.float16]
-converter.quantized_input_stats = {"im0": (0.0, 1.0)}
-converter.default_ranges_stats = (0.0, 25.0)
+#converter.optimizations = [tf.lite.Optimize.DEFAULT]
+#converter.target_spec.supported_types = [tf.float16]
+#converter.quantized_input_stats = {"im0": (0.0, 1.0)}
+#converter.default_ranges_stats = (-0.2, 20.0)
 #converter.experimental_new_converter = True
+#converter.experimental_new_quantizer = True
 
 #Conversione vera e propria
 tflite_model = converter.convert()
