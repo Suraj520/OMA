@@ -1,6 +1,18 @@
 #include <jni.h>
 #include <stdint.h>
 
+/**
+ * Trasforma un buffer RGB8 in un FloatBuffer con nornalizzazione del pixel [0,1].
+ * Non vengono effettuati controlli sui parametri.
+ *
+ * @param env
+ * @param clazz
+ * @param in buffer in ingresso RGB8
+ * @param out float buffer in uscita.
+ * @param in_length lunghezza buffer in ingresso
+ * @param out_length lunghezza buffer uscita
+ * @return 0
+ */
 JNIEXPORT jint JNICALL
 Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_RGBbufferNormalization(JNIEnv* env,
                                                                         jclass clazz,
@@ -25,6 +37,20 @@ Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_RGBbufferNormalization(JNIEnv* en
     return 0;
 }
 
+
+/**
+ * Trasforma un buffer ARGB8 in un FloatBuffer con nornalizzazione del pixel [0,1].
+ * Non vengono effettuati controlli sui parametri.
+ * Ancora da testare.
+ *
+ * @param env
+ * @param clazz
+ * @param in buffer in ingresso ARGB8
+ * @param out float buffer in uscita.
+ * @param in_length lunghezza buffer in ingresso
+ * @param out_length lunghezza buffer uscita
+ * @return 0
+ */
 JNIEXPORT jint JNICALL
 Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_ARGBbufferNormalization(JNIEnv * env,
                                                                         jclass clazz,
@@ -50,6 +76,19 @@ Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_ARGBbufferNormalization(JNIEnv * 
     return 0;
 }
 
+/**
+ * Trasforma un buffer RGBA8 in un FloatBuffer con nornalizzazione del pixel [0,1].
+ * Non vengono effettuati controlli sui parametri.
+ * Ancora da testare.
+ *
+ * @param env
+ * @param clazz
+ * @param in buffer in ingresso RGBA8
+ * @param out float buffer in uscita.
+ * @param in_length lunghezza buffer in ingresso
+ * @param out_length lunghezza buffer uscita
+ * @return 0
+ */
 JNIEXPORT jint JNICALL
 Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_RGBAbufferNormalization(JNIEnv* env,
                                                                         jclass clazz,

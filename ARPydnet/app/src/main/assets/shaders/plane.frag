@@ -15,12 +15,13 @@
 
 precision highp float;
 
-uniform sampler2D u_Texture;
-uniform sampler2D u_maskTexture;
-uniform sampler2D u_depthColorTexture;
+uniform sampler2D u_texture;
+uniform sampler2D u_inferenceTexture;
+uniform sampler2D u_plasmaTexture;
 
 uniform float u_maskEnabled;
-uniform float u_depthColorEnabled;
+uniform float u_plasmaEnabled;
+uniform float u_plasmaFactor;
 
 uniform vec2 u_windowSize;
 
@@ -28,12 +29,11 @@ uniform vec4 u_dotColor;
 uniform vec4 u_lineColor;
 uniform vec4 u_gridControl;  // dotThreshold, lineThreshold, lineFadeShrink, occlusionShrink
 
-varying vec3 v_TexCoordAlpha;
+varying vec3 v_texCoordAlpha;
 
 varying vec3 v_worldPos;
 uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
-uniform float u_quantizerFactor;
 uniform float u_screenOrientation;
 
 void main() {
@@ -71,8 +71,8 @@ void main() {
             texcoord = vec2(1.0-texcoord.x, texcoord.y);
         }
 
-        vec4 textureVector = texture2D(u_maskTexture, texcoord);
-        float pydnetDistance = textureVector.r * u_scaleFactor * u_quantizerFactor;
+        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+        float pydnetDistance = inferenceVector.r * u_scaleFactor;
 
         float dx = u_cameraPose.x-v_worldPos.x;
         float dy = u_cameraPose.y-v_worldPos.y;
@@ -85,14 +85,14 @@ void main() {
         }
     }
 
-    vec4 control = texture2D(u_Texture, v_TexCoordAlpha.xy);
-    float dotScale = v_TexCoordAlpha.z;
-    float lineFade = max(0.0, u_gridControl.z * v_TexCoordAlpha.z - (u_gridControl.z - 1.0));
+    vec4 control = texture2D(u_texture, v_texCoordAlpha.xy);
+    float dotScale = v_texCoordAlpha.z;
+    float lineFade = max(0.0, u_gridControl.z * v_texCoordAlpha.z - (u_gridControl.z - 1.0));
     vec3 color = (control.r * dotScale > u_gridControl.x) ? u_dotColor.rgb
                : (control.g > u_gridControl.y)            ? u_lineColor.rgb * lineFade
                                                           : (u_lineColor.rgb * 0.25 * lineFade) ;
 
-    if(u_depthColorEnabled > 0.5){
+    if(u_plasmaEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
         vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
 
@@ -123,10 +123,22 @@ void main() {
             texcoord = vec2(1.0-texcoord.x, texcoord.y);
         }
 
-        vec4 depthColorTexture = texture2D(u_depthColorTexture, texcoord);
+        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 
-        gl_FragColor = vec4(color.r * depthColorTexture.rgb, v_TexCoordAlpha.z * u_gridControl.w);
+        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+
+        //Normalizzazione.
+        if(inferenceValue < 0.0) inferenceValue = 0.0;
+        if(inferenceValue > 255.0) inferenceValue = 255.0;
+        inferenceValue = inferenceValue / 255.0f;
+
+        //U: 0.0, 1.0, V: 0.0
+        //Si tratta di una texture monodimensionale.
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+
+        gl_FragColor = vec4(color * plasmaVector.rgb, v_texCoordAlpha.z * u_gridControl.w);
     }else{
-        gl_FragColor = vec4(color, v_TexCoordAlpha.z * u_gridControl.w);
+        gl_FragColor = vec4(color, v_texCoordAlpha.z * u_gridControl.w);
     }
 }

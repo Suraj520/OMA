@@ -76,6 +76,18 @@ public class ObjectRenderer {
     private int program;
     private final int[] textures = new int[3];
 
+    private int getTextureId(){
+        return textures[0];
+    }
+
+    private int getInferenceTexture(){
+        return textures[1];
+    }
+
+    private int getPlasmaTexture(){
+        return textures[2];
+    }
+
     // Shader location: model view projection matrix.
     private int modelUniform;
     private int modelViewUniform;
@@ -90,7 +102,6 @@ public class ObjectRenderer {
     private int textureUniform;
 
     // Shader location: environment properties.
-    private int maskEnabledUniform;
     private int lightingParametersUniform;
 
     // Shader location: material properties.
@@ -116,25 +127,32 @@ public class ObjectRenderer {
     private float specularPower = 6.0f;
 
     private boolean maskEnabled;
-    private int maskTextureUniform;
+    private int maskEnabledUniform;
+    private int inferenceTextureUniform;
+    private int scaleFactorUniform;
+    private float scaleFactor;
+
+    public void setScaleFactor(float scaleFactor) {
+        this.scaleFactor = scaleFactor;
+    }
 
     public void setMaskEnabled(boolean maskEnabled) {
         this.maskEnabled = maskEnabled;
     }
 
-    private int depthColorEnabledUniform;
-    private int depthColorTextureUniform;
+    private int plasmaEnabledUniform;
+    private int plasmaTextureUniform;
+    private int plasmaFactorUniform;
 
-    private boolean depthColorEnabled = false;
+    private boolean plasmaEnabled = false;
+    private float plasmaFactor = Utils.PLASMA_FACTOR;
 
-    public void setDepthColorEnabled(boolean depthColorEnabled) {
-        this.depthColorEnabled = depthColorEnabled;
+    public void setPlasmaEnabled(boolean plasmaEnabled) {
+        this.plasmaEnabled = plasmaEnabled;
     }
 
-    private boolean quantizedMaskEnabled = false;
-
-    public void setQuantizedMaskEnabled(boolean quantizedMaskEnabled) {
-        this.quantizedMaskEnabled = quantizedMaskEnabled;
+    public void setPlasmaFactor(float plasmaFactor) {
+        this.plasmaFactor = plasmaFactor;
     }
 
     private int windowSizeUniform;
@@ -147,21 +165,6 @@ public class ObjectRenderer {
         this.cameraPose[0] = cameraPose.tx();
         this.cameraPose[1] = cameraPose.ty();
         this.cameraPose[2] = cameraPose.tz();
-    }
-
-    private int scaleFactorUniform;
-    private float scaleFactor;
-
-    public void setScaleFactor(float scaleFactor) {
-        this.scaleFactor = scaleFactor;
-    }
-
-
-    private int quantizerFactorUniform;
-    private float quantizerFactor;
-
-    public void setQuantizerFactor(float quantizerFactor) {
-        this.quantizerFactor = quantizerFactor;
     }
 
     private int screenOrientationUniform;
@@ -195,33 +198,33 @@ public class ObjectRenderer {
 
         ShaderUtil.checkGLError(TAG, "Program creation");
 
-        modelUniform = GLES20.glGetUniformLocation(program, "u_Model");
-        modelViewUniform = GLES20.glGetUniformLocation(program, "u_ModelView");
-        modelViewProjectionUniform = GLES20.glGetUniformLocation(program, "u_ModelViewProjection");
+        modelUniform = GLES20.glGetUniformLocation(program, "u_model");
+        modelViewUniform = GLES20.glGetUniformLocation(program, "u_modelView");
+        modelViewProjectionUniform = GLES20.glGetUniformLocation(program, "u_modelViewProjection");
 
-        positionAttribute = GLES20.glGetAttribLocation(program, "a_Position");
-        normalAttribute = GLES20.glGetAttribLocation(program, "a_Normal");
-        texCoordAttribute = GLES20.glGetAttribLocation(program, "a_TexCoord");
+        positionAttribute = GLES20.glGetAttribLocation(program, "a_position");
+        normalAttribute = GLES20.glGetAttribLocation(program, "a_normal");
+        texCoordAttribute = GLES20.glGetAttribLocation(program, "a_texCoord");
 
-        textureUniform = GLES20.glGetUniformLocation(program, "u_Texture");
-        maskTextureUniform = GLES20.glGetUniformLocation(program, "u_maskTexture");
-        depthColorTextureUniform = GLES20.glGetUniformLocation(program, "u_depthColorTexture");
+        textureUniform = GLES20.glGetUniformLocation(program, "u_texture");
+        inferenceTextureUniform = GLES20.glGetUniformLocation(program, "u_inferenceTexture");
+        plasmaTextureUniform = GLES20.glGetUniformLocation(program, "u_plasmaTexture");
 
         maskEnabledUniform = GLES20.glGetUniformLocation(program, "u_maskEnabled");
-        depthColorEnabledUniform = GLES20.glGetUniformLocation(program, "u_depthColorEnabled");
+        plasmaEnabledUniform = GLES20.glGetUniformLocation(program, "u_plasmaEnabled");
+        plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
 
         windowSizeUniform = GLES20.glGetUniformLocation(program, "u_windowSize");
 
         scaleFactorUniform = GLES20.glGetUniformLocation(program, "u_scaleFactor");
-        quantizerFactorUniform = GLES20.glGetUniformLocation(program, "u_quantizerFactor");
         cameraPoseUniform = GLES20.glGetUniformLocation(program, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(program, "u_screenOrientation");
 
-        lightingParametersUniform = GLES20.glGetUniformLocation(program, "u_LightingParameters");
-        materialParametersUniform = GLES20.glGetUniformLocation(program, "u_MaterialParameters");
+        lightingParametersUniform = GLES20.glGetUniformLocation(program, "u_lightingParameters");
+        materialParametersUniform = GLES20.glGetUniformLocation(program, "u_materialParameters");
         colorCorrectionParameterUniform =
-                GLES20.glGetUniformLocation(program, "u_ColorCorrectionParameters");
-        colorUniform = GLES20.glGetUniformLocation(program, "u_ObjColor");
+                GLES20.glGetUniformLocation(program, "u_colorCorrectionParameters");
+        colorUniform = GLES20.glGetUniformLocation(program, "u_objColor");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
 
@@ -232,7 +235,7 @@ public class ObjectRenderer {
         GLES20.glGenTextures(textures.length, textures, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[0]);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getTextureId());
 
         GLES20.glTexParameteri(
                 GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR_MIPMAP_LINEAR);
@@ -245,9 +248,9 @@ public class ObjectRenderer {
 
         textureBitmap.recycle();
 
-        //Init mask texture
+        //Init custom textures
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[1]);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getInferenceTexture());
 
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
@@ -258,13 +261,16 @@ public class ObjectRenderer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[2]);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPlasmaTexture());
 
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+
+        //Carico la texture plasma Width: 256 height: 1
+        GLES30.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGB32F, Utils.PLASMA.length / 3, 1, 0, GLES30.GL_RGB, GLES30.GL_FLOAT, FloatBuffer.wrap(Utils.PLASMA));
 
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
@@ -427,24 +433,24 @@ public class ObjectRenderer {
 
         // Attach the object texture.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[0]);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getTextureId());
         GLES20.glUniform1i(textureUniform, 0);
 
         //Attach mask texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[1]);
-        GLES20.glUniform1i(maskTextureUniform, 1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getInferenceTexture());
+        GLES20.glUniform1i(inferenceTextureUniform, 1);
 
         //Attach depth color texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[2]);
-        GLES20.glUniform1i(depthColorTextureUniform, 2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPlasmaTexture());
+        GLES20.glUniform1i(plasmaTextureUniform, 2);
 
         //Enabled Uniform
         GLES20.glUniform1f(maskEnabledUniform, maskEnabled ? 1.0f : 0.0f);
-        GLES20.glUniform1f(depthColorEnabledUniform, depthColorEnabled ? 1.0f : 0.0f);
-        GLES20.glUniform1f(quantizerFactorUniform, quantizedMaskEnabled ? quantizerFactor : 1.0f);
+        GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
+        GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
 
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, screenData, 0);
         GLES20.glUniform2f(windowSizeUniform, screenData[2], screenData[3]);
@@ -499,7 +505,15 @@ public class ObjectRenderer {
         GLES20.glDisableVertexAttribArray(normalAttribute);
         GLES20.glDisableVertexAttribArray(texCoordAttribute);
 
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
 
         ShaderUtil.checkGLError(TAG, "After draw");
     }
@@ -515,34 +529,24 @@ public class ObjectRenderer {
     //http://www.anandmuralidhar.com/blog/android/load-read-texture/
     //https://github.com/anandmuralidhar24/FloatTextureAndroid
     //Metodo per caricare la maschera
-    public void loadMask(FloatBuffer inference, Utils.Resolution resolution){
+    public void loadInference(FloatBuffer inference, Utils.Resolution resolution){
         //Anche se in precedenza ho usato GLES20, il contesto è di tipo 3.0, compatibile con i precedenti.
         inference.rewind();
 
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[1]);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getInferenceTexture());
 
         GLES30.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R32F, resolution.getWidth(), resolution.getHeight(), 0, GLES30.GL_RED, GLES30.GL_FLOAT, inference);
 
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
     }
 
-
     /**
      * Carica l'immagine di depth. Non libera la risorsa bitmap.
      * @param image bitmap con l'informazione della depth.
      */
-    public void loadMaskImage(Bitmap image){
-        loadMask(image, 0, textures[1], GLES20.GL_TEXTURE1);
-    }
-
-
-    /**
-     * Carica l'immagine di colore depth. Non libera la risorsa bitmap.
-     * @param image bitmap con il depth color
-     */
-    public void loadDepthColorImage(Bitmap image){
-        loadMask(image, 0, textures[2], GLES20.GL_TEXTURE2);
+    public void loadInferenceImage(Bitmap image){
+        loadTexture(image, 0, getInferenceTexture(), GLES20.GL_TEXTURE1);
     }
 
     /**
@@ -553,7 +557,7 @@ public class ObjectRenderer {
      * @param textureId bind della texture openGL
      * @param activeTexture bind della texture attiva openGL
      */
-    private void loadMask(Bitmap image, int rotation, int textureId, int activeTexture){
+    private void loadTexture(Bitmap image, int rotation, int textureId, int activeTexture){
         Bitmap flipped = image;
 
         //https://stackoverflow.com/questions/4518689/texture-coordinates-in-opengl-android-showing-image-reversed

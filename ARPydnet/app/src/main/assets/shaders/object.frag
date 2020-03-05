@@ -15,30 +15,30 @@
 
 precision highp float;
 
-uniform sampler2D u_Texture;
-uniform sampler2D u_maskTexture;
-uniform sampler2D u_depthColorTexture;
+uniform sampler2D u_texture;
+uniform sampler2D u_inferenceTexture;
+uniform sampler2D u_plasmaTexture;
 
 uniform float u_maskEnabled;
-uniform float u_depthColorEnabled;
+uniform float u_plasmaEnabled;
+uniform float u_plasmaFactor;
 
 uniform vec2 u_windowSize;
 
-uniform vec4 u_LightingParameters;
-uniform vec4 u_MaterialParameters;
-uniform vec4 u_ColorCorrectionParameters;
+uniform vec4 u_lightingParameters;
+uniform vec4 u_materialParameters;
+uniform vec4 u_colorCorrectionParameters;
 
-varying vec3 v_ViewPosition;
-varying vec3 v_ViewNormal;
+varying vec3 v_viewPosition;
+varying vec3 v_viewNormal;
 
-varying vec2 v_TexCoord;
+varying vec2 v_texCoord;
 
-uniform vec4 u_ObjColor;
+uniform vec4 u_objColor;
 
 varying vec3 v_worldPos;
 uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
-uniform float u_quantizerFactor;
 uniform float u_screenOrientation;
 
 void main() {
@@ -79,8 +79,8 @@ void main() {
         }
 
 
-        vec4 textureVector = texture2D(u_maskTexture, texcoord);
-        float pydnetDistance = textureVector.r * u_scaleFactor * u_quantizerFactor;
+        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+        float pydnetDistance = inferenceVector.r * u_scaleFactor;
 
         //Fai un pò di ricerca su dove cade il punto...
 
@@ -101,27 +101,27 @@ void main() {
     const float kMiddleGrayGamma = 0.466;
 
     // Unpack lighting and material parameters for better naming.
-    vec3 viewLightDirection = u_LightingParameters.xyz;
-    vec3 colorShift = u_ColorCorrectionParameters.rgb;
-    float averagePixelIntensity = u_ColorCorrectionParameters.a;
+    vec3 viewLightDirection = u_lightingParameters.xyz;
+    vec3 colorShift = u_colorCorrectionParameters.rgb;
+    float averagePixelIntensity = u_colorCorrectionParameters.a;
 
-    float materialAmbient = u_MaterialParameters.x;
-    float materialDiffuse = u_MaterialParameters.y;
-    float materialSpecular = u_MaterialParameters.z;
-    float materialSpecularPower = u_MaterialParameters.w;
+    float materialAmbient = u_materialParameters.x;
+    float materialDiffuse = u_materialParameters.y;
+    float materialSpecular = u_materialParameters.z;
+    float materialSpecularPower = u_materialParameters.w;
 
     // Normalize varying parameters, because they are linearly interpolated in the vertex shader.
-    vec3 viewFragmentDirection = normalize(v_ViewPosition);
-    vec3 viewNormal = normalize(v_ViewNormal);
+    vec3 viewFragmentDirection = normalize(v_viewPosition);
+    vec3 viewNormal = normalize(v_viewNormal);
 
     // Flip the y-texture coordinate to address the texture from top-left.
-    vec4 objectColor = texture2D(u_Texture, vec2(v_TexCoord.x, 1.0 - v_TexCoord.y));
+    vec4 objectColor = texture2D(u_texture, vec2(v_texCoord.x, 1.0 - v_texCoord.y));
 
     // Apply color to grayscale image only if the alpha of u_ObjColor is
     // greater and equal to 255.0.
-    if (u_ObjColor.a >= 255.0) {
+    if (u_objColor.a >= 255.0) {
       float intensity = objectColor.r;
-      objectColor.rgb = u_ObjColor.rgb * intensity / 255.0;
+      objectColor.rgb = u_objColor.rgb * intensity / 255.0;
     }
 
     // Apply inverse SRGB gamma to the texture before making lighting calculations.
@@ -146,7 +146,7 @@ void main() {
     // Apply average pixel intensity and color shift
     color *= colorShift * (averagePixelIntensity / kMiddleGrayGamma);
 
-    if(u_depthColorEnabled > 0.5){
+    if(u_plasmaEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
         vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
 
@@ -177,9 +177,21 @@ void main() {
             texcoord = vec2(1.0-texcoord.x, texcoord.y);
         }
 
-        vec4 depthColorTexture = texture2D(u_depthColorTexture, texcoord);
+        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 
-        gl_FragColor.rgb = color.r * depthColorTexture.rgb;
+        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+
+        //Normalizzazione.
+        if(inferenceValue < 0.0) inferenceValue = 0.0;
+        if(inferenceValue > 255.0) inferenceValue = 255.0;
+        inferenceValue = inferenceValue / 255.0f;
+
+        //U: 0.0, 1.0, V: 0.0
+        //Si tratta di una texture monodimensionale.
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+
+        gl_FragColor.rgb = color * plasmaVector.rgb;
     }else{
         gl_FragColor.rgb = color;
     }

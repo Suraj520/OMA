@@ -13,30 +13,30 @@
  * limitations under the License.
  */
 
-uniform mat4 u_Model;
-uniform mat4 u_ModelView;
-uniform mat4 u_ModelViewProjection;
+uniform mat4 u_model;
+uniform mat4 u_modelView;
+uniform mat4 u_modelViewProjection;
 
-attribute vec4 a_Position;
-attribute vec3 a_Normal;
-attribute vec2 a_TexCoord;
+attribute vec4 a_position;
+attribute vec3 a_normal;
+attribute vec2 a_texCoord;
 
-varying vec3 v_ViewPosition;
-varying vec3 v_ViewNormal;
+varying vec3 v_viewPosition;
+varying vec3 v_viewNormal;
 
-varying vec2 v_TexCoord;
+varying vec2 v_texCoord;
 
 varying vec3 v_worldPos;
 
 void main() {
     //Ricavo le coordinate spaziali.
     //La matrice del model viene ricavata dall'ancora. Quindi teoricamente dovrebbe essere in scala con il resto delle distanze.
-    v_worldPos = (u_Model * a_Position).xyz;
+    v_worldPos = (u_model * a_position).xyz;
 
-    v_ViewPosition = (u_ModelView * a_Position).xyz;
-    v_ViewNormal = normalize((u_ModelView * vec4(a_Normal, 0.0)).xyz);
+    v_viewPosition = (u_modelView * a_position).xyz;
+    v_viewNormal = normalize((u_modelView * vec4(a_normal, 0.0)).xyz);
 
-    v_TexCoord = a_TexCoord;
+    v_texCoord = a_texCoord;
 
-    gl_Position = u_ModelViewProjection * a_Position;
+    gl_Position = u_modelViewProjection * a_position;
 }

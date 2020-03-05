@@ -8,6 +8,7 @@ import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
 
 import it.unibo.cvlab.Runner;
 import it.unibo.cvlab.pydnet.Utils;
@@ -108,7 +109,7 @@ public class Calibrator {
     private Utils.Resolution resolution;
     private int[] output;
 
-    public Calibrator(float scaleFactor, Utils.Resolution resolution,  int poolSize){
+    public Calibrator(float scaleFactor, Utils.Resolution resolution, int poolSize){
         this.defaultScaleFactor = scaleFactor;
         this.scaleFactor = defaultScaleFactor;
         this.resolution = resolution;
@@ -303,7 +304,7 @@ public class Calibrator {
      * @param cloud nuovola di punti di arcore
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
+    public void calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose, ArrayList<MyAnchor> anchors){
         if (cloud.getTimestamp() == lastTimestamp) {
             // Redundant call.
             return;
@@ -414,13 +415,75 @@ public class Calibrator {
 
         }
 
+        //Introduzione delle ancore
+        if(anchors.size() > 0){
+            for(MyAnchor myAnchor : anchors){
+                Pose pose = myAnchor.getAnchor().getPose();
+                pose.getTranslation(coords, 0);
+                coords[3] = 1.0f;
+
+                //Passaggio fondamentale: trasformazione delle coordinate.
+                Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
+
+                //Passaggio alle cordinate normali
+                projectionCoords[0] /= projectionCoords[3];
+                projectionCoords[1] /= projectionCoords[3];
+//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
+
+                //Clipping: se il punto è fuori dallo schermo non lo considero.
+                //Avrei potuto spostare sopra il clipping e verificare con w
+                if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
+                    continue;
+                }
+
+                if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
+                    continue;
+                }
+
+                //Viewport Transform
+                //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
+                //Coordinate normalizzate(uv): [0.0,1.0]
+                //Origine in bottom-left.
+                //Seguo i fragment per la conversione.
+
+                float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
+                float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
+
+                //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
+                float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
+
+                //Trasformo le coordinate normalizate in [0,width[, [0.height[
+                int x = Math.round(finalCoords[0] * resolution.getWidth());
+                int y = Math.round(finalCoords[1] * resolution.getHeight());
+
+                int position = (resolution.getWidth() * y) + x;
+
+                inference.rewind();
+
+                if(inference.remaining() >= position){
+                    //Ricavo la distanza.
+                    float distance = getDistance(pose, cameraPose);
+                    //Ricavo la distanza pydnet.
+                    float predictedDistance = inference.get(position);
+                    //Faccio la somma: prendo una media PONDERATA dei punti.
+                    sumScaleFactor += (distance / predictedDistance);
+                    sumWeight += 1;
+
+                    if(minDistance > distance) minDistance = distance;
+                    if(maxDistance < distance) maxDistance = distance;
+                    if(minPredictedDistance > predictedDistance) minPredictedDistance = predictedDistance;
+                    if(maxPredictedDistance < predictedDistance) maxPredictedDistance = predictedDistance;
+                }else{
+                    //Stranamente non riesco a trovare la predizione.
+                    Log.w(TAG, "Impossibile trovare predizione di calibrazione Ancora");
+                }
+
+            }
+        }
+
         //Devo verificare che ci sia il minimo di punti per la somma.
-        if(i > 0){
+        if(sumWeight > 0){
             float tmpScaleFactor = sumScaleFactor / sumWeight;
-//            Log.d(TAG, "Calculated pydnet scale factor: "+tmpScaleFactor);
-//            Log.d(TAG, "Distance (min, max): "+minDistance+", "+maxDistance);
-//            Log.d(TAG, "Predicted distance (min, max): "+minPredictedDistance+", "+maxPredictedDistance);
-//            Log.d(TAG, "Scaled predicted distance (min, max): "+minPredictedDistance*scaleFactor+", "+maxPredictedDistance*scaleFactor);
 
             if(tmpScaleFactor <= MIN_SCALE_FACTOR || Float.isNaN(tmpScaleFactor)){
                 Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
@@ -428,8 +491,6 @@ public class Calibrator {
                 scaleFactor = tmpScaleFactor;
             }
         }
-
-//        Log.d(TAG, "Visible Points: "+visiblePoints);
 
         this.minDistance = minDistance;
         this.maxDistance = maxDistance;

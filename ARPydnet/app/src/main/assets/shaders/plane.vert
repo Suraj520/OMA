@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-uniform mat4 u_Model;
-uniform mat4 u_ModelViewProjection;
-uniform mat2 u_PlaneUvMatrix;
-uniform vec3 u_Normal;
+uniform mat4 u_model;
+uniform mat4 u_modelViewProjection;
+uniform mat2 u_planeUvMatrix;
+uniform vec3 u_normal;
 
-attribute vec3 a_XZPositionAlpha; // (x, z, alpha)
+attribute vec3 a_positionXZAlpha; // (x, z, alpha)
 
-varying vec3 v_TexCoordAlpha;
+varying vec3 v_texCoordAlpha;
 varying vec3 v_worldPos;
 
 void main() {
    //Il piano è situato in XZ... Ha senso per una terna destrorsa.
-   vec4 local_pos = vec4(a_XZPositionAlpha.x, 0.0, a_XZPositionAlpha.y, 1.0);
+   vec4 local_pos = vec4(a_positionXZAlpha.x, 0.0, a_positionXZAlpha.y, 1.0);
    //La matrice del model viene ricavata dall'ancora. Quindi teoricamente dovrebbe essere in scala con il resto delle distanze.
-   vec4 world_pos = u_Model * local_pos;
+   vec4 world_pos = u_model * local_pos;
 
    v_worldPos = world_pos.xyz;
 
@@ -35,12 +35,12 @@ void main() {
    // This arbitrary choice is not co-linear with either horizontal
    // or vertical plane normals.
    const vec3 arbitrary = vec3(1.0, 1.0, 0.0);
-   vec3 vec_u = normalize(cross(u_Normal, arbitrary));
-   vec3 vec_v = normalize(cross(u_Normal, vec_u));
+   vec3 vec_u = normalize(cross(u_normal, arbitrary));
+   vec3 vec_v = normalize(cross(u_normal, vec_u));
 
    // Project vertices in world frame onto vec_u and vec_v.
    vec2 uv = vec2(dot(world_pos.xyz, vec_u), dot(world_pos.xyz, vec_v));
 
-   v_TexCoordAlpha = vec3(u_PlaneUvMatrix * uv, a_XZPositionAlpha.z);
-   gl_Position = u_ModelViewProjection * local_pos;
+   v_texCoordAlpha = vec3(u_planeUvMatrix * uv, a_positionXZAlpha.z);
+   gl_Position = u_modelViewProjection * local_pos;
 }

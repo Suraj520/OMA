@@ -112,7 +112,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private final PlaneRenderer planeRenderer = new PlaneRenderer();
     private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
 
-    private final PointerRenderer pointerRenderer = new PointerRenderer();
     private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
 
     //Ricavo il numero di thread massimi.
@@ -121,7 +120,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     private Model currentModel = null;
     private FloatBuffer inference = null;
-    private ByteBuffer rawInference = null;
 
     //Usato per far girare pydnet in un altro thread.
     private Handler inferenceHandler;
@@ -135,7 +133,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private static final Utils.Scale SCALE = Utils.Scale.HEIGHT;
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
     private static final float COLOR_SCALE_FACTOR = 10.5f;
-    private static final int QUANTIZER_LEVELS = 64;
 
     //Oggetti usati per l'unione della Pydnet e ARCore
     //Immagine dalla camera: usata per la maschera e per la pydnet.
@@ -148,25 +145,12 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     private boolean depthColorEnabled = false;
     private boolean maskEnabled = false;
-    private boolean quantizedMaskEnabled = false;
-    private boolean pointerMode = false;
     private boolean dualScreenMode = false;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
 
-    // Anchors created from taps used for object placing with a given color.
-    private static class ColoredAnchor {
-        private final Anchor anchor;
-        private final float[] color;
-
-        private ColoredAnchor(Anchor a, float[] color4f) {
-            this.anchor = a;
-            this.color = color4f;
-        }
-    }
-
-    private final ArrayList<ColoredAnchor> anchors = new ArrayList<>();
+    private final ArrayList<MyAnchor> anchors = new ArrayList<>();
 
     private void prepareModel(){
         if(currentModel == null){
@@ -218,8 +202,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         Menu optionsMenu = optionsToolbar.getMenu();
         optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
         optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
-        optionsMenu.findItem(R.id.toggle_quantize).setIcon(quantizedMaskEnabled ? R.drawable.ic_quantize : R.drawable.ic_quantize_off);
-        optionsMenu.findItem(R.id.toggle_pointer).setIcon(pointerMode ? R.drawable.ic_pointer : R.drawable.ic_pointer_off);
         optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
 
         //Attivo il depth solo se non siamo in dual mode.
@@ -236,16 +218,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 case R.id.toggle_mask:
                     maskEnabled = !maskEnabled;
                     item.setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
-                    return true;
-
-                case R.id.toggle_quantize:
-                    quantizedMaskEnabled = !quantizedMaskEnabled;
-                    item.setIcon(quantizedMaskEnabled ? R.drawable.ic_quantize : R.drawable.ic_quantize_off);
-                    return true;
-
-                case R.id.toggle_pointer:
-                    pointerMode = !pointerMode;
-                    item.setIcon(pointerMode ? R.drawable.ic_pointer : R.drawable.ic_pointer_off);
                     return true;
 
                 case R.id.toggle_dual_screen:{
@@ -316,7 +288,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
         });
 
-        prepareModel();
+//        prepareModel();
 
         calibrator = new Calibrator(MAPPER_SCALE_FACTOR, RESOLUTION, NUMBER_THREADS);
 
@@ -488,8 +460,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             virtualObjectShadow.setBlendMode(ObjectRenderer.BlendMode.Shadow);
             virtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
 
-            pointerRenderer.createOnGlThread(this, "models/mirino.png");
-
             screenshotRenderer.createOnGlThread(this, RESOLUTION);
 
             ShaderUtil.checkGLError(TAG, "OnSurfaceCreated");
@@ -504,7 +474,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         backgroundRenderer.onSurfaceChanged(width, height);
         screenshotRenderer.onSurfaceChanged(width, height);
         calibrator.onSurfaceChanged(width, height);
-        pointerRenderer.onSurfaceChanged(width, height);
 
         displayRotationHelper.onSurfaceChanged(width, height);
 
@@ -531,6 +500,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         if (session == null) {
             return;
         }
+
+        if(currentModel == null) prepareModel();
 
         Frame frame;
 
@@ -591,61 +562,43 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 virtualObjectShadow.setMaskEnabled(maskEnabled);
 
                 //Impostazione del colore di profondità
-                backgroundRenderer.setDepthColorEnabled(depthColorEnabled);
-                planeRenderer.setDepthColorEnabled(depthColorEnabled);
-                virtualObject.setDepthColorEnabled(depthColorEnabled);
-                virtualObjectShadow.setDepthColorEnabled(depthColorEnabled);
-
-                planeRenderer.setQuantizedMaskEnabled(quantizedMaskEnabled);
-                virtualObject.setQuantizedMaskEnabled(quantizedMaskEnabled);
-                virtualObjectShadow.setQuantizedMaskEnabled(quantizedMaskEnabled);
+                backgroundRenderer.setPlasmaEnabled(depthColorEnabled);
+                planeRenderer.setPlasmaEnabled(depthColorEnabled);
+                virtualObject.setPlasmaEnabled(depthColorEnabled);
+                virtualObjectShadow.setPlasmaEnabled(depthColorEnabled);
 
                 if(maskEnabled){
-                    if(quantizedMaskEnabled){
-                        Bitmap quantizedDepthMap = calibrator.getQuantizedDepthMap(inference, NUMBER_THREADS, QUANTIZER_LEVELS);
-                        planeRenderer.setQuantizerFactor(calibrator.getQuantizerFactor());
-                        virtualObject.setQuantizerFactor(calibrator.getQuantizerFactor());
-                        virtualObjectShadow.setQuantizerFactor(calibrator.getQuantizerFactor());
-
-                        planeRenderer.loadMaskImage(quantizedDepthMap);
-                        virtualObject.loadMaskImage(quantizedDepthMap);
-                        virtualObjectShadow.loadMaskImage(quantizedDepthMap);
-
-                        quantizedDepthMap.recycle();
-                    }else{
-                        planeRenderer.loadMask(inference, RESOLUTION);
-                        virtualObject.loadMask(inference, RESOLUTION);
-                        virtualObjectShadow.loadMask(inference, RESOLUTION);
-                    }
+                    planeRenderer.loadInference(inference, RESOLUTION);
+                    virtualObject.loadInference(inference, RESOLUTION);
+                    virtualObjectShadow.loadInference(inference, RESOLUTION);
                 }
 
                 if (depthColorEnabled || dualScreenMode) {
-                    Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
-
                     if(depthColorEnabled){
-                        backgroundRenderer.loadDepthColorImage(bitmapDepthColor);
-
-                        planeRenderer.loadDepthColorImage(bitmapDepthColor);
-                        virtualObject.loadDepthColorImage(bitmapDepthColor);
-                        virtualObjectShadow.loadDepthColorImage(bitmapDepthColor);
+                        backgroundRenderer.loadInference(inference, RESOLUTION);
+                        planeRenderer.loadInference(inference, RESOLUTION);
+                        virtualObject.loadInference(inference, RESOLUTION);
+                        virtualObjectShadow.loadInference(inference, RESOLUTION);
                     }
 
                     if(dualScreenMode){
-                        dualFragment.updateDepthImage(bitmapDepthColor);
-                        dualFragment.requestRender();
+                        runInBackground(()->{
+                            Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
+                            dualFragment.updateDepthImage(bitmapDepthColor);
+                            dualFragment.requestRender();
+                            bitmapDepthColor.recycle();
+                        });
                     }
-
-                    bitmapDepthColor.recycle();
                 }
             } else {
                 planeRenderer.setMaskEnabled(false);
                 virtualObject.setMaskEnabled(false);
                 virtualObjectShadow.setMaskEnabled(false);
 
-                backgroundRenderer.setDepthColorEnabled(false);
-                planeRenderer.setDepthColorEnabled(false);
-                virtualObject.setDepthColorEnabled(false);
-                virtualObjectShadow.setDepthColorEnabled(false);
+                backgroundRenderer.setPlasmaEnabled(false);
+                planeRenderer.setPlasmaEnabled(false);
+                virtualObject.setPlasmaEnabled(false);
+                virtualObjectShadow.setPlasmaEnabled(false);
             }
 
             //Qui inizia il disegno dello sfondo (camera)
@@ -655,7 +608,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             //Devo ricavarlo dopo il rendering dello sfondo.
             //Ricavo il frame da opengl: il frame della camera è diverso da quello di arcore.
             if(!isProcessingFrame){
-                //Profile: 100 ms
+                //Profile: 20 ms
                 //Vecchio metodo: 160 ms
 
 //                long nanos = SystemClock.elapsedRealtime();
@@ -669,7 +622,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 runInBackground(() -> {
 //                    long nanos2 = SystemClock.elapsedRealtime();
-                    rawInference = currentModel.doRawInference(SCALE);
+                    ByteBuffer rawInference = currentModel.doRawInference(SCALE);
 //                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos2));
 
                     inference = rawInference.asFloatBuffer();
@@ -700,7 +653,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // Use try-with-resources to automatically release the point cloud.
             try (PointCloud pointCloud = frame.acquirePointCloud()) {
                 if(inference != null)
-                    calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
+                    calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose, anchors);
 
                 //Il numero visible points è indicativo, ci potrebbero essere più punti rispetto
                 //A quelli sullo schermo
@@ -724,29 +677,26 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
 
             // Visualize anchors created by touch.
-            for (ColoredAnchor coloredAnchor : anchors) {
+            for (MyAnchor coloredAnchor : anchors) {
 
-                if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
+                final Anchor anchor = coloredAnchor.getAnchor();
+                final float[] color = coloredAnchor.getColor();
+
+
+                if (anchor.getTrackingState() != TrackingState.TRACKING) {
                     continue;
                 }
 
-                // Get the current pose of an Anchor in world space. The Anchor pose is updated
-                // during calls to session.update() as ARCore refines its estimate of the world.
-                Pose objPose = coloredAnchor.anchor.getPose();
-
-                //La matrice viene generata in column-major come richiesto da openGL.
-                objPose.toMatrix(anchorMatrix, 0);
+                //Modifico la anchorMatrix in modo che l'oggetto si muova.
+                coloredAnchor.update();
+                coloredAnchor.toMatrix(anchorMatrix, 0);
 
                 // Update and draw the model and its shadow.
                 virtualObject.updateModelMatrix(anchorMatrix, OBJ_SCALE_FACTOR);
                 virtualObjectShadow.updateModelMatrix(anchorMatrix, OBJ_SCALE_FACTOR);
 
-                virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-                virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-            }
-
-            if(pointerMode){
-                pointerRenderer.draw();
+                virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, color);
+                virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, color);
             }
 
         } catch (Throwable t) {
@@ -763,53 +713,47 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         MotionEvent tap = tapHelper.poll();
 
         if (tap != null) {
-            if (pointerMode) {
-                int x = Math.round(tap.getRawX());
-                int y = Math.round(tap.getRawY());
+            if (camera.getTrackingState() == TrackingState.TRACKING) {
+                for (HitResult hit : frame.hitTest(tap)) {
 
-                pointerRenderer.setXY(x,y);
-            } else{
-                if (camera.getTrackingState() == TrackingState.TRACKING) {
-                    for (HitResult hit : frame.hitTest(tap)) {
+                    // Check if any plane was hit, and if it was hit inside the plane polygon
+                    Trackable trackable = hit.getTrackable();
+                    // Creates an anchor if a plane or an oriented point was hit.
 
-                        // Check if any plane was hit, and if it was hit inside the plane polygon
-                        Trackable trackable = hit.getTrackable();
-                        // Creates an anchor if a plane or an oriented point was hit.
+                    if ((trackable instanceof Plane
+                            && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
+                            && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
+                            || (trackable instanceof Point
+                            && ((Point) trackable).getOrientationMode()
+                            == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
 
-                        if ((trackable instanceof Plane
-                                && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
-                                && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
-                                || (trackable instanceof Point
-                                && ((Point) trackable).getOrientationMode()
-                                == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
+                        // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
+                        // Cap the number of objects created. This avoids overloading both the
+                        // rendering system and ARCore.
+                        if (anchors.size() >= 20) {
+                            anchors.get(0).getAnchor().detach();
+                            anchors.remove(0);
+                        }
 
-                            // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
-                            // Cap the number of objects created. This avoids overloading both the
-                            // rendering system and ARCore.
-                            if (anchors.size() >= 20) {
-                                anchors.get(0).anchor.detach();
-                                anchors.remove(0);
-                            }
+                        // Assign a color to the object for rendering.
+                        Anchor anchor = hit.createAnchor();
 
-                            // Assign a color to the object for rendering.
-                            Anchor anchor = hit.createAnchor();
-
-                            float[] myMatrix = new float[16];
-                            anchor.getPose().toMatrix(myMatrix, 0);
+                        float[] myMatrix = new float[16];
+                        anchor.getPose().toMatrix(myMatrix, 0);
 
 //                            Log.d(TAG, "Raw XY: " + tap.getRawX() + ", " + tap.getRawY());
 //                            Log.d(TAG, "XY test: " + calibrator.xyTest(anchor.getPose(), tap.getRawX(), tap.getRawY()));
 //                            Log.d(TAG, "Calibration test: " + calibrator.calibrationTest(inference, anchor.getPose(), camera.getDisplayOrientedPose(), tap.getRawX(), tap.getRawY()));
 
-                            float[] objColor = new float[]{233.0f, 233.0f, 244.0f, 255.0f};
+                        float[] objColor = new float[]{233.0f, 233.0f, 244.0f, 255.0f};
 
-                            // Adding an Anchor tells ARCore that it should track this position in
-                            // space. This anchor is created on the Plane to place the 3D model
-                            // in the correct position relative both to the world and to the plane.
-                            anchors.add(new ColoredAnchor(anchor, objColor));
+                        // Adding an Anchor tells ARCore that it should track this position in
+                        // space. This anchor is created on the Plane to place the 3D model
+                        // in the correct position relative both to the world and to the plane.
+                        //Salvo anche il piano: in questo modo posso far muovere il mio oggetto nello spazio del piano.
+                        anchors.add(new MyAnchor(anchor, objColor, trackable));
 
-                            break;
-                        }
+                        break;
                     }
                 }
             }

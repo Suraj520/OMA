@@ -15,22 +15,10 @@
         app:showAsAction="always"/>
 
     <item
-        android:id="@+id/toggle_quantize"
-        android:icon="@drawable/ic_quantize_off"
-        android:title="@string/quantizeMask"
-        app:showAsAction="ifRoom"/>
-
-    <item
         android:id="@+id/toggle_dual_screen"
         android:icon="@drawable/ic_dual_screen_off"
         android:title="@string/toggle_dual_screen"
         app:showAsAction="always"/>
-
-    <item
-        android:id="@+id/toggle_pointer"
-        android:icon="@drawable/ic_pointer_off"
-        android:title="@string/toggle_pointer"
-        app:showAsAction="ifRoom"/>
 
     <item
         android:id="@+id/reset"

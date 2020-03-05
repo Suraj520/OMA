@@ -15,12 +15,9 @@
 package com.google.ar.core.examples.java.common.rendering;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.graphics.Matrix;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
-import android.opengl.GLUtils;
+import android.opengl.GLES30;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -34,7 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-import it.unibo.cvlab.pydnet.Model;
+import it.unibo.cvlab.pydnet.Utils;
 
 /**
  * This class renders the AR background from camera feed. It creates and hosts the texture given to
@@ -71,17 +68,27 @@ public class BackgroundRenderer {
 
     private FloatBuffer backgroundCoordsBuffer;
     private FloatBuffer backgroundTexCoordsBuffer;
-    private FloatBuffer maskTexCoordsBuffer;
+    private FloatBuffer plasmaTexCoordsBuffer;
+
+    private FloatBuffer plasmaBuffer;
 
     //Riferimento al programma shader
     private int program;
 
     //Riferimenti ai Sampler
     private int backgroundTextureUniform;
-    private int depthColorTextureUniform;
+    private int plasmaTextureUniform;
+    private int inferenceTextureUniform;
 
     //Riferimento all'abilitatore della maschera.
-    private int depthColorEnabledUniform;
+    private int plasmaEnabledUniform;
+    private int plasmaFactorUniform;
+
+    private float plasmaFactor = Utils.PLASMA_FACTOR;
+
+    public void setPlasmaFactor(float plasmaFactor) {
+        this.plasmaFactor = plasmaFactor;
+    }
 
     //Riferimento alla posizione dello sfondo e della relativa maschera.
     private int backgroundPositionAttribute;
@@ -90,11 +97,11 @@ public class BackgroundRenderer {
     private int backgroundTexCoordAttribute;
 
     //Riferimento alle coordinate delle texture.
-    private int maskTexCoordAttribute;
+    private int plasmaTexCoordAttribute;
 
-    private int[] textures = new int[3];
+    private int[] textures = new int[4];
 
-    public int getDepthColorTextureId(){
+    private int getInferenceTextureId(){
         return textures[0];
     }
 
@@ -106,14 +113,18 @@ public class BackgroundRenderer {
         return textures[2];
     }
 
-    private boolean depthColorEnabled = false;
-
-    public boolean isDepthColorEnabled() {
-        return depthColorEnabled;
+    private int getPlasmaTextureId(){
+        return textures[3];
     }
 
-    public void setDepthColorEnabled(boolean depthColorEnabled) {
-        this.depthColorEnabled = depthColorEnabled;
+    private boolean plasmaEnabled = false;
+
+    public boolean isPlasmaEnabled() {
+        return plasmaEnabled;
+    }
+
+    public void setPlasmaEnabled(boolean plasmaEnabled) {
+        this.plasmaEnabled = plasmaEnabled;
     }
 
     private int[] frameBuffers = new int[1];
@@ -150,32 +161,41 @@ public class BackgroundRenderer {
         // Generate the textures.
         GLES20.glGenTextures(textures.length, textures, 0);
 
-        int textureTarget = GLES20.GL_TEXTURE_2D;
-
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(textureTarget, getDepthColorTextureId());
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getInferenceTextureId());
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
 
-        GLES20.glBindTexture(textureTarget, 0);
-
-
-        textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-        GLES20.glBindTexture(textureTarget, getBackgroundTextureId());
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPlasmaTextureId());
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
 
-        GLES20.glBindTexture(textureTarget, 0);
+        //Carico la texture plasma Width: 256 height: 1
+        GLES30.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGB32F, Utils.PLASMA.length / 3, 1, 0, GLES30.GL_RGB, GLES30.GL_FLOAT, FloatBuffer.wrap(Utils.PLASMA));
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
+
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
 
@@ -184,24 +204,22 @@ public class BackgroundRenderer {
         GLES20.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
 
-        textureTarget = GLES20.GL_TEXTURE_2D;
-
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(textureTarget, getScreenshotFrameBufferTextureId());
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getScreenshotFrameBufferTextureId());
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
 
-        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, textureTarget, getScreenshotFrameBufferTextureId(), 0);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, getScreenshotFrameBufferTextureId(), 0);
 
         if (GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) == GLES20.GL_FRAMEBUFFER_COMPLETE) {
             Log.d(TAG, "Framebuffer caricato correttamente");
         }
 
-        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "Framebuffer loading");
@@ -231,9 +249,9 @@ public class BackgroundRenderer {
                 ByteBuffer.allocateDirect(numVertices * TEXCOORDS_PER_VERTEX * FLOAT_SIZE);
         maskTexCoordsTransformed.order(ByteOrder.nativeOrder());
 
-        maskTexCoordsBuffer = maskTexCoordsTransformed.asFloatBuffer();
-        maskTexCoordsBuffer.put(QUAD_TEXTURE_COORDS);
-        maskTexCoordsBuffer.rewind();
+        plasmaTexCoordsBuffer = maskTexCoordsTransformed.asFloatBuffer();
+        plasmaTexCoordsBuffer.put(QUAD_TEXTURE_COORDS);
+        plasmaTexCoordsBuffer.rewind();
 
 
         int vertexShader =
@@ -257,11 +275,14 @@ public class BackgroundRenderer {
 
         backgroundPositionAttribute = GLES20.glGetAttribLocation(program, "a_position");
         backgroundTexCoordAttribute = GLES20.glGetAttribLocation(program, "a_backgroundTextCoord");
-        maskTexCoordAttribute = GLES20.glGetAttribLocation(program, "a_maskTextCoord");
+        plasmaTexCoordAttribute = GLES20.glGetAttribLocation(program, "a_plasmaTextCoord");
 
-        depthColorEnabledUniform = GLES20.glGetUniformLocation(program, "u_depthColorEnabled");
         backgroundTextureUniform = GLES20.glGetUniformLocation(program, "u_backgroundTexture");
-        depthColorTextureUniform = GLES20.glGetUniformLocation(program, "u_depthColorTexture");
+        plasmaTextureUniform = GLES20.glGetUniformLocation(program, "u_plasmaTexture");
+        inferenceTextureUniform = GLES20.glGetUniformLocation(program, "u_inferenceTexture");
+
+        plasmaEnabledUniform = GLES20.glGetUniformLocation(program, "u_plasmaEnabled");
+        plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
@@ -289,7 +310,7 @@ public class BackgroundRenderer {
                     Coordinates2d.OPENGL_NORMALIZED_DEVICE_COORDINATES,
                     backgroundCoordsBuffer,
                     Coordinates2d.TEXTURE_NORMALIZED,
-                    maskTexCoordsBuffer);
+                    plasmaTexCoordsBuffer);
         }
 
         if (frame.getTimestamp() == 0) {
@@ -310,7 +331,7 @@ public class BackgroundRenderer {
 
         // Ensure position is rewound before use.
         backgroundTexCoordsBuffer.position(0);
-        maskTexCoordsBuffer.position(0);
+        plasmaTexCoordsBuffer.position(0);
 
         // No need to test or write depth, the screen quad has arbitrary depth, and is expected
         // to be drawn first.
@@ -321,14 +342,21 @@ public class BackgroundRenderer {
 
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 1");
 
+        //Binding color factor
+        GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
+
         //Binding delle texture
-        GLES20.glUniform1i(depthColorTextureUniform, 0);
-        GLES20.glUniform1i(backgroundTextureUniform,  2);
+        GLES20.glUniform1i(inferenceTextureUniform, 0);
+        GLES20.glUniform1i(plasmaTextureUniform, 2);
+        GLES20.glUniform1i(backgroundTextureUniform,  3);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getDepthColorTextureId());
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getInferenceTextureId());
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPlasmaTextureId());
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
 
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 2");
@@ -342,17 +370,17 @@ public class BackgroundRenderer {
                 backgroundTexCoordAttribute, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, backgroundTexCoordsBuffer);
 
         GLES20.glVertexAttribPointer(
-                maskTexCoordAttribute, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, maskTexCoordsBuffer);
+                plasmaTexCoordAttribute, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, plasmaTexCoordsBuffer);
 
         // Enable vertex arrays
         GLES20.glEnableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
-        GLES20.glEnableVertexAttribArray(maskTexCoordAttribute);
+        GLES20.glEnableVertexAttribArray(plasmaTexCoordAttribute);
 
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 3");
 
         //Binding del coefficiente: Devo farlo falso per evitare colorazioni nel framebuffer.
-        GLES20.glUniform1f(depthColorEnabledUniform, 0.0f);
+        GLES20.glUniform1f(plasmaEnabledUniform, 0.0f);
 
         //Disegno nel framebuffer
         //https://stackoverflow.com/questions/4041682/android-opengl-es-framebuffer-objects-rendering-depth-buffer-to-texture
@@ -363,7 +391,7 @@ public class BackgroundRenderer {
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 4");
 
         //Binding del coefficiente:
-        GLES20.glUniform1f(depthColorEnabledUniform, depthColorEnabled ? 1.0f : 0.0f);
+        GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
 
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
@@ -373,7 +401,7 @@ public class BackgroundRenderer {
         // Disable vertex arrays
         GLES20.glDisableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glDisableVertexAttribArray(backgroundTexCoordAttribute);
-        GLES20.glDisableVertexAttribArray(maskTexCoordAttribute);
+        GLES20.glDisableVertexAttribArray(plasmaTexCoordAttribute);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
@@ -382,6 +410,9 @@ public class BackgroundRenderer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         // Restore the depth state for further drawing.
@@ -391,48 +422,20 @@ public class BackgroundRenderer {
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw");
     }
 
-    public void loadBackgroundImage(Bitmap image){
-        loadImage(image, 0, getBackgroundTextureId(), GLES20.GL_TEXTURE2, GLES11Ext.GL_TEXTURE_EXTERNAL_OES);
+    //https://community.khronos.org/t/loading-and-reading-a-floating-point-texture/63360
+    //http://www.anandmuralidhar.com/blog/android/load-read-texture/
+    //https://github.com/anandmuralidhar24/FloatTextureAndroid
+    //Metodo per caricare la maschera
+    public void loadInference(FloatBuffer inference, Utils.Resolution resolution){
+        //Anche se in precedenza ho usato GLES20, il contesto è di tipo 3.0, compatibile con i precedenti.
+        inference.rewind();
+
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getInferenceTextureId());
+
+        GLES30.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R32F, resolution.getWidth(), resolution.getHeight(), 0, GLES30.GL_RED, GLES30.GL_FLOAT, inference);
+
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
     }
 
-    /**
-     * Carica l'immagine di depth. Non libera la risorsa bitmap.
-     * @param image bitmap con l'informazione della depth.
-     */
-    public void loadDepthColorImage(Bitmap image){
-        loadImage(image, 0, getDepthColorTextureId(), GLES20.GL_TEXTURE0, GLES20.GL_TEXTURE_2D);
-    }
-
-    /**
-     * Carica un immagine in una texture openGL.
-     *
-     * @param image immagine bitmap da caricare
-     * @param rotation rotazione da imporre alla maschera
-     * @param textureId bind della texture openGL
-     * @param activeTexture bind della texture attiva openGL
-     */
-    private void loadImage(Bitmap image, int rotation, int textureId, int activeTexture, int textureTarget){
-        Bitmap flipped = image;
-
-        //https://stackoverflow.com/questions/4518689/texture-coordinates-in-opengl-android-showing-image-reversed
-        if(rotation != 0){
-            Matrix flip = new Matrix();
-            flip.postRotate(rotation);
-            flipped = Bitmap.createBitmap(image, 0, 0, image.getWidth(), image.getHeight(), flip, true);
-        }
-
-        GLES20.glActiveTexture(activeTexture);
-        GLES20.glBindTexture(textureTarget, textureId);
-
-        GLUtils.texImage2D(textureTarget, 0, flipped, 0);
-
-        GLES20.glBindTexture(textureTarget, 0);
-
-        ShaderUtil.checkGLError(TAG, "mask loading");
-
-        // Recycle the bitmap, since its data has been loaded into OpenGL.
-        //Faccio il recycle solo del bitmap interno
-        if(flipped != image)
-            flipped.recycle();
-    }
 }

@@ -17,19 +17,36 @@
 precision mediump float;
 
 varying vec2 v_backgroundTextCoord;
-varying vec2 v_maskTextCoord;
+varying vec2 v_plasmaTextCoord;
 
 uniform samplerExternalOES u_backgroundTexture;
-uniform sampler2D u_depthColorTexture;
 
-uniform float u_depthColorEnabled;
+uniform sampler2D u_inferenceTexture;
+uniform sampler2D u_plasmaTexture;
+
+uniform float u_plasmaEnabled;
+uniform float u_plasmaFactor;
 
 void main() {
     vec4 backgroundTextureColor = texture2D(u_backgroundTexture, v_backgroundTextCoord);
 
-    if(u_depthColorEnabled > 0.5){
-        vec4 depthColorTexture = texture2D(u_depthColorTexture, v_maskTextCoord);
-        backgroundTextureColor.rgb = backgroundTextureColor.rgb * depthColorTexture.rgb;
+    //Modalità visione depth: plasma color.
+    if(u_plasmaEnabled > 0.5){
+        vec4 inferenceVector = texture2D(u_inferenceTexture, v_plasmaTextCoord);
+
+        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+
+        //Normalizzazione.
+        if(inferenceValue < 0.0) inferenceValue = 0.0;
+        if(inferenceValue > 255.0) inferenceValue = 255.0;
+        inferenceValue = inferenceValue / 255.0f;
+
+        //U: 0.0, 1.0, V: 0.0
+        //Si tratta di una texture monodimensionale.
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+
+        backgroundTextureColor.rgb = backgroundTextureColor.rgb * plasmaVector.rgb;
     }
 
     gl_FragColor = backgroundTextureColor;

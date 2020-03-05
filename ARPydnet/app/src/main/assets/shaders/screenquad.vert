@@ -15,13 +15,13 @@
 
 attribute vec4 a_position;
 attribute vec2 a_backgroundTextCoord;
-attribute vec2 a_maskTextCoord;
+attribute vec2 a_plasmaTextCoord;
 
 varying vec2 v_backgroundTextCoord;
-varying vec2 v_maskTextCoord;
+varying vec2 v_plasmaTextCoord;
 
 void main() {
    gl_Position = a_position;
    v_backgroundTextCoord = a_backgroundTextCoord;
-   v_maskTextCoord = a_maskTextCoord;
+   v_plasmaTextCoord = a_plasmaTextCoord;
 }
