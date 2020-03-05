@@ -236,8 +236,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     onSessionPause();
                     session.close();
                     session = null;
+                    anchors.clear();
 
-//                    disposeModel();
+                    disposeModel();
 
                     //Cambio il fragment.
 
@@ -254,8 +255,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                         currentFragment = singleFragment;
                     }
-
-//                    prepareModel();
 
                     onSessionResume();
 
@@ -275,9 +274,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         session.close();
                         session = null;
 
-//                        disposeModel();
-//                        prepareModel();
-
+                        disposeModel();
                         onSessionResume();
                     }
 
@@ -292,7 +289,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
         calibrator = new Calibrator(MAPPER_SCALE_FACTOR, RESOLUTION, NUMBER_THREADS);
 
-        colorMapper = new ColorMapper(COLOR_SCALE_FACTOR, true, NUMBER_THREADS);
+        colorMapper = new ColorMapper(COLOR_SCALE_FACTOR, NUMBER_THREADS);
         colorMapper.prepare(RESOLUTION);
 
         installRequested = false;
@@ -582,12 +579,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     }
 
                     if(dualScreenMode){
-                        runInBackground(()->{
-                            Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
-                            dualFragment.updateDepthImage(bitmapDepthColor);
-                            dualFragment.requestRender();
-                            bitmapDepthColor.recycle();
-                        });
+                        Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
+                        dualFragment.updateDepthImage(bitmapDepthColor);
+                        dualFragment.requestRender();
+                        bitmapDepthColor.recycle();
                     }
                 }
             } else {

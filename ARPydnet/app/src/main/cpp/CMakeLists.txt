@@ -18,3 +18,12 @@ add_library( # Specifies the name of the library.
 
              # Provides a relative path to your source file(s).
              native-norm.c)
+
+add_library( # Specifies the name of the library.
+        native-color
+
+        # Sets the library as a shared library.
+        SHARED
+
+        # Provides a relative path to your source file(s).
+        native-color.c)

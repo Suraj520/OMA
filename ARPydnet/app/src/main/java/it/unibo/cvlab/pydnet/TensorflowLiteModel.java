@@ -5,6 +5,7 @@ import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -26,12 +27,13 @@ public class TensorflowLiteModel extends Model{
     private static final String TAG = TensorflowLiteModel.class.getSimpleName();
 
     private static final int DATA_SIZE = 4;
+    private static boolean useNative = true;
 
     static{
         System.loadLibrary("native-norm");
     }
 
-    public static void fillWithData(int[] in, int width, int height, ByteBuffer out){
+    private static void fillWithData(int[] in, int width, int height, ByteBuffer out){
         out.rewind();
 
         final int length = width*height;
@@ -45,7 +47,7 @@ public class TensorflowLiteModel extends Model{
         out.rewind();
     }
 
-    public static void fillWithBuffer(IntBuffer in, int width, int height, ByteBuffer out){
+    private static void fillWithBuffer(IntBuffer in, int width, int height, ByteBuffer out){
         out.rewind();
         in.rewind();
 
@@ -61,11 +63,27 @@ public class TensorflowLiteModel extends Model{
         in.rewind();
     }
 
-    public static void fillWithBuffer(ByteBuffer in,  ByteBuffer out){
+    private static void fillWithBuffer(ByteBuffer in,  ByteBuffer out){
         in.order(ByteOrder.nativeOrder());
         out.order(ByteOrder.nativeOrder());
 
-        RGBbufferNormalization(in, out, in.remaining(), out.remaining());
+        if(useNative){
+            try{
+                RGBbufferNormalization(in, out, in.remaining(), out.remaining());
+            }catch (UnsatisfiedLinkError e){
+                useNative = false;
+                Log.w(TAG, "Impossibile usare il nativo per tflite model fill");
+            }
+        }else{
+            final int length = out.remaining();
+            for (int i = 0; i < length; i+=3) {
+                out.putFloat(in.get()/255.0f);
+                out.putFloat(in.get()/255.0f);
+                out.putFloat(in.get()/255.0f);
+            }
+        }
+
+
     }
 
     private static native int RGBbufferNormalization(ByteBuffer in, ByteBuffer out, int inLength, int outLength);

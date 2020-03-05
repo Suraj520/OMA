@@ -32,19 +32,21 @@ public class ColorMapper {
 
     private static final String TAG = ColorMapper.class.getSimpleName();
 
-//    private static final int[] strange = new int[]{3203, 3204, 3205, 3206, 3843, 3844, 3845, 3846, 4483, 4484, 4485, 4486, 5123, 5124, 5125, 5126, 5763, 5764, 5765, 5766, 6403, 6404, 6405, 6406, 7043, 7044, 7045, 7046};
+    static{
+        System.loadLibrary("native-color");
+    }
 
     private final float scaleFactor;
-    private final boolean applyColorMap;
     private final int[] colorMap;
     private int[] output;
     private boolean isPrepared = false;
     private Runner[] pool;
     private Utils.Resolution resolution;
 
-    public ColorMapper(float scaleFactor, boolean applyColorMap, int poolSize){
+    private boolean useNative = true;
+
+    public ColorMapper(float scaleFactor, int poolSize){
         this.scaleFactor = scaleFactor;
-        this.applyColorMap = applyColorMap;
 
         int i = 0;
 
@@ -75,6 +77,8 @@ public class ColorMapper {
         isPrepared = true;
     }
 
+    private native int applyColorMap(int start, int end, FloatBuffer inference, float scaleFactor, int[] colorMap, int[] output);
+
     public Bitmap getColorMap(final FloatBuffer inference, int numberThread) {
         if (!isPrepared) {
             throw new RuntimeException("ColorMapper is not prepared.");
@@ -98,17 +102,20 @@ public class ColorMapper {
             final int curEnd = current_end;
 
             pool[index].doJob(()->{
-                for(int i = curStart; i < curEnd; i++){
-                    float prediction = inference.get(i);
-
-                    if(applyColorMap){
+                if(useNative){
+                    try{
+                        applyColorMap(curStart, curEnd, inference, scaleFactor, colorMap, output);
+                    }catch (UnsatisfiedLinkError ex){
+                        useNative = false;
+                        Log.w(TAG, "Impossibile usare il nativo del color");
+                    }
+                }else{
+                    for(int i = curStart; i < curEnd; i++){
+                        float prediction = inference.get(i);
                         int colorIndex =  (int)(prediction * scaleFactor);
                         colorIndex = Math.min(Math.max(colorIndex, 0), colorMap.length - 1);
                         output[i] = colorMap[colorIndex];
-                    } else{
-                        output[i] =  (int) (prediction * scaleFactor);
                     }
-
                 }
             });
         }

@@ -12,7 +12,7 @@ public class MyAnchor {
     private final float[] color;
 
     private float radius = 0.2f;
-    private float angularSpeed = 0.01f;
+    private float angularSpeed = 0.05f;
     private float currentAngle = 0.0f;
 
     private float x,y;
