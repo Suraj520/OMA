@@ -1,6 +1,11 @@
 #include <jni.h>
 #include <stdint.h>
 
+JNIEXPORT jint JNICALL
+Java_it_unibo_cvlab_pydnet_TensorflowLiteModel_testNativeNormFunctions(JNIEnv *env, jclass clazz) {
+    return (jint)0;
+}
+
 /**
  * Trasforma un buffer RGB8 in un FloatBuffer con nornalizzazione del pixel [0,1].
  * Non vengono effettuati controlli sui parametri.

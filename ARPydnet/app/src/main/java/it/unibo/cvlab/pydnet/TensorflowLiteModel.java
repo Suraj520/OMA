@@ -29,10 +29,58 @@ public class TensorflowLiteModel extends Model{
     private static final String TAG = TensorflowLiteModel.class.getSimpleName();
 
     private static final int DATA_SIZE = 4;
-    private static boolean useNative = true;
+    private static boolean useNativeNorm = true;
+    private static boolean useNativeTfLite = false;
 
     static{
-        System.loadLibrary("native-norm");
+        if(useNativeNorm){
+            System.loadLibrary("native-norm");
+
+            try{
+                testNativeNormFunctions();
+            }catch (UnsatisfiedLinkError ex){
+                useNativeNorm = false;
+                Log.w(TAG, "Normalizzazione nativa non disponibile");
+            }
+        }
+
+        if(useNativeTfLite){
+            System.loadLibrary("native-tflite-model");
+
+            try{
+                testNativeTfLiteFunctions();
+            }catch (UnsatisfiedLinkError ex){
+                useNativeTfLite = false;
+                Log.w(TAG, "TFLite nativo non disponibile");
+            }
+        }
+    }
+
+    private static native int testNativeTfLiteFunctions();
+    private static native int testNativeNormFunctions();
+
+    // Helper static methods
+
+    /**
+     * Carica il modello ottimmizato della pydnet dagli assert.
+     *
+     * @param assets manager per ottenere gli assert
+     * @param modelFilename nome del modello da caricare
+     * @return Restituisce un buffer leggibile dagli interpreti
+     * @throws IOException Qualche errore nell'apertura del file.
+     */
+    private static MappedByteBuffer loadModelFile(AssetManager assets, String modelFilename)
+            throws IOException {
+
+        AssetFileDescriptor fileDescriptor = assets.openFd(modelFilename);
+
+        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+        FileChannel fileChannel = inputStream.getChannel();
+
+        long startOffset = fileDescriptor.getStartOffset();
+        long declaredLength = fileDescriptor.getDeclaredLength();
+
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
     private static void fillWithData(int[] in, int width, int height, ByteBuffer out){
@@ -69,13 +117,8 @@ public class TensorflowLiteModel extends Model{
         in.order(ByteOrder.nativeOrder());
         out.order(ByteOrder.nativeOrder());
 
-        if(useNative){
-            try{
-                RGBbufferNormalization(in, out, in.remaining(), out.remaining());
-            }catch (UnsatisfiedLinkError e){
-                useNative = false;
-                Log.w(TAG, "Impossibile usare il nativo per tflite model fill");
-            }
+        if(useNativeNorm){
+            RGBbufferNormalization(in, out, in.capacity(), out.capacity());
         }else{
             final int length = out.remaining();
             for (int i = 0; i < length; i+=3) {
@@ -95,25 +138,44 @@ public class TensorflowLiteModel extends Model{
     protected Interpreter tfLite;
     private boolean isPrepared = false;
 
+    private ByteBuffer inputBackup;
+    protected ByteBuffer input;
+
+    protected ByteBuffer inference;
+
 
     public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
         super(context, generalModel, name, checkpoint);
 
-        Interpreter.Options tfliteOptions = new Interpreter.Options();
+        if(useNativeTfLite){
+            try {
+                MappedByteBuffer buffer = loadModelFile(context.getAssets(), checkpoint);
+                final int status = createInterpreter(buffer, buffer.capacity(), true);
 
-        //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
+                if(status != 0) throw new RuntimeException("Errore init interprete:"+status);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }else{
+            Interpreter.Options tfliteOptions = new Interpreter.Options();
+
+            //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
 //        tfliteOptions.setAllowFp16PrecisionForFp32(true);
-        tfliteOptions.setNumThreads(4);
+            tfliteOptions.setNumThreads(4);
 
 //        addGPUDelegate(tfliteOptions);
 //        addNNAPIDelegate(tfliteOptions);
 
-        try {
-            MappedByteBuffer buffer = loadModelFile(context.getAssets(), checkpoint);
-            this.tfLite = new Interpreter(buffer, tfliteOptions);
-        } catch (IOException e) {
-            e.printStackTrace();
+            try {
+                MappedByteBuffer buffer = loadModelFile(context.getAssets(), checkpoint);
+                this.tfLite = new Interpreter(buffer, tfliteOptions);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
+
+
     }
 
     private void addGPUDelegate(Interpreter.Options options){
@@ -193,7 +255,6 @@ public class TensorflowLiteModel extends Model{
             throw new RuntimeException("Model is not prepared.");
         }
 
-
         fillWithBuffer(data, input);
     }
 
@@ -231,40 +292,42 @@ public class TensorflowLiteModel extends Model{
 //
 //        tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
 
-        tfLite.run(input, inference);
+        if(useNativeTfLite){
+            final int status = invoke(input, input.capacity(), inference, inference.capacity());
+            if(status != 0) throw new RuntimeException("Errore invoke interprete:"+status);
+        }else{
+            tfLite.run(input, inference);
+        }
 
+
+        input.rewind();
         inference.rewind();
 
         return inference;
     }
 
-    // Helper static methods
+    public void loadDirect(ByteBuffer input){
+        if(inputBackup == null) inputBackup = this.input;
+        this.input = input;
+    }
 
-    /**
-     * Carica il modello ottimmizato della pydnet dagli assert.
-     *
-     * @param assets manager per ottenere gli assert
-     * @param modelFilename nome del modello da caricare
-     * @return Restituisce un buffer leggibile dagli interpreti
-     * @throws IOException Qualche errore nell'apertura del file.
-     */
-    private static MappedByteBuffer loadModelFile(AssetManager assets, String modelFilename)
-            throws IOException {
-
-        AssetFileDescriptor fileDescriptor = assets.openFd(modelFilename);
-
-        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-        FileChannel fileChannel = inputStream.getChannel();
-
-
-        long startOffset = fileDescriptor.getStartOffset();
-        long declaredLength = fileDescriptor.getDeclaredLength();
-
-        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    public void restore(){
+        if(inputBackup != null)
+            this.input = inputBackup;
     }
 
     public void dispose(){
         super.dispose();
-        tfLite.close();
+
+        if(useNativeTfLite){
+            deleteInterpreter();
+        }else{
+            tfLite.close();
+        }
     }
+
+
+    private native int createInterpreter(ByteBuffer modelPath, long modelSize, boolean useGPU);
+    private native int invoke(ByteBuffer in, long inSize, ByteBuffer out, long outSize);
+    private native int deleteInterpreter();
 }

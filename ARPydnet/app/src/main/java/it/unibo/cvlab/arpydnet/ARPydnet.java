@@ -616,9 +616,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 isProcessingFrame = true;
 
                 runInBackground(() -> {
-//                    long nanos2 = SystemClock.elapsedRealtime();
+                    long nanos2 = SystemClock.elapsedRealtime();
                     ByteBuffer rawInference = currentModel.doRawInference(SCALE);
-//                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos2));
+                    Log.d(TAG, "inference takes: " + (SystemClock.elapsedRealtime()-nanos2));
 
                     inference = rawInference.asFloatBuffer();
                     isProcessingFrame = false;

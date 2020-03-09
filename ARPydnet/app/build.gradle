@@ -33,6 +33,13 @@ android {
             path file('src/main/cpp/CMakeLists.txt')
         }
     }
+    sourceSets {
+        main {
+            // let gradle pack the shared library into apk
+            jni.srcDirs = []
+            jniLibs.srcDirs = ['src/main/cpp/dist/libs']
+        }
+    }
 }
 
 dependencies {
@@ -56,6 +63,8 @@ dependencies {
 //    implementation(name:'tensorflow-lite-gpu', ext:'aar')
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-nightly'
     implementation 'org.tensorflow:tensorflow-lite-gpu:0.0.0-nightly'
+
+//    implementation 'org.tensorflow:tensorflow-lite:0.0.0-gpu-experimental'
 
     // ARCore library
     // Dependency version is rewritten at build time.
