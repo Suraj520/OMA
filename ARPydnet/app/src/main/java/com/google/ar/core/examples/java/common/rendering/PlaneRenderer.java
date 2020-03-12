@@ -76,7 +76,7 @@ public class PlaneRenderer {
     private static final float[] GRID_CONTROL = {0.2f, 0.4f, 2.0f, 1.5f};
 
     private int planeProgram;
-    private final int[] textures = new int[3];
+    private final int[] textures = new int[4];
 
     private int getTextureId(){
         return textures[0];
@@ -88,6 +88,10 @@ public class PlaneRenderer {
 
     private int getPlasmaTexture(){
         return textures[2];
+    }
+
+    private int getRainTexture(){
+        return textures[3];
     }
 
     private int planeXZPositionAlphaAttribute;
@@ -125,6 +129,7 @@ public class PlaneRenderer {
     private int maskEnabledUniform;
     private int inferenceTextureUniform;
     private boolean maskEnabled;
+
     private int scaleFactorUniform;
     private float scaleFactor;
 
@@ -149,6 +154,32 @@ public class PlaneRenderer {
 
     public void setPlasmaFactor(float plasmaFactor) {
         this.plasmaFactor = plasmaFactor;
+    }
+
+    private int timeUniform;
+    private int rainResolutionUniform;
+    private int rainEnabledUniform;
+    private int rainTextureUniform;
+
+    private boolean rainEnabled = false;
+    private float time = 0.0f;
+    private float timeSpeed = 0.05f;
+    private float[] rainResolution = new float[]{50000f, 50000f};
+
+    public void setRainEnabled(boolean rainEnabled) {
+        this.rainEnabled = rainEnabled;
+    }
+
+    public void updateTime(){
+        this.time += this.timeSpeed;
+    }
+
+    public void setTimeSpeed(float timeSpeed) {
+        this.timeSpeed = timeSpeed;
+    }
+
+    public void setRainResolution(float[] rainResolution) {
+        this.rainResolution = rainResolution;
     }
 
     private int windowSizeUniform;
@@ -198,6 +229,9 @@ public class PlaneRenderer {
         Bitmap textureBitmap =
                 BitmapFactory.decodeStream(context.getAssets().open(gridDistanceTextureName));
 
+        Bitmap rainBitmap =
+                BitmapFactory.decodeStream(context.getAssets().open("models/rain.png"));
+
         GLES20.glGenTextures(textures.length, textures, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -210,6 +244,8 @@ public class PlaneRenderer {
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, textureBitmap, 0);
         GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        textureBitmap.recycle();
 
         //Init custom textures
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
@@ -237,6 +273,23 @@ public class PlaneRenderer {
 
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getRainTexture());
+
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+
+        //Carico la texture rain
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, rainBitmap, 0);
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        rainBitmap.recycle();
+
         ShaderUtil.checkGLError(TAG, "Texture loading");
 
         planeXZPositionAlphaAttribute = GLES20.glGetAttribLocation(planeProgram, "a_positionXZAlpha");
@@ -258,6 +311,11 @@ public class PlaneRenderer {
         plasmaTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaTexture");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaEnabled");
         plasmaFactorUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaFactor");
+
+        timeUniform = GLES20.glGetUniformLocation(planeProgram, "u_time");
+        rainEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_rainEnabled");
+        rainResolutionUniform = GLES20.glGetUniformLocation(planeProgram, "u_rainResolution");
+        rainTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_rainTexture");
 
         windowSizeUniform = GLES20.glGetUniformLocation(planeProgram, "u_windowSize");
 
@@ -457,21 +515,30 @@ public class PlaneRenderer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getTextureId());
         GLES20.glUniform1i(textureUniform, 0);
 
-        //Attach mask texture
+        //Attach inference texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getInferenceTexture());
         GLES20.glUniform1i(inferenceTextureUniform, 1);
 
-        //Attach depth color texture
+        //Attach plasma texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPlasmaTexture());
         GLES20.glUniform1i(plasmaTextureUniform, 2);
+
+        //Attach rain texture
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getRainTexture());
+        GLES20.glUniform1i(rainTextureUniform, 3);
 
         //Enabled Uniform
         GLES20.glUniform1f(maskEnabledUniform, maskEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
         GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
+
+        GLES20.glUniform1f(rainEnabledUniform, rainEnabled ? 1.0f : 0.0f);
+        GLES20.glUniform1f(timeUniform, time);
+        GLES20.glUniform2f(rainResolutionUniform, rainResolution[0], rainResolution[1]);
 
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, screenData, 0);
         GLES20.glUniform2f(windowSizeUniform, screenData[2], screenData[3]);
@@ -540,6 +607,8 @@ public class PlaneRenderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
         ShaderUtil.checkGLError(TAG, "Cleaning up after drawing planes");
     }

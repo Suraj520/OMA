@@ -12,11 +12,14 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MotionEvent;
+import android.view.View;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatSeekBar;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentContainerView;
@@ -77,6 +80,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     private static final String TAG = ARPydnet.class.getSimpleName();
 
+    public static final boolean DEMO_MODE = true;
+
     public static final float NEAR_PLANE = 0.2f;
     public static final float FAR_PLANE = 5.0f;
 
@@ -85,6 +90,12 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     @BindView(R.id.optionsToolbar)
     Toolbar optionsToolbar;
+
+    @BindView(R.id.speedSeekBar)
+    AppCompatSeekBar speedSeekBar;
+
+    @BindView(R.id.radiusSeekBar)
+    AppCompatSeekBar radiusSeekBar;
 
     @BindView(R.id.logTextView)
     TextView logTextView;
@@ -146,11 +157,12 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean depthColorEnabled = false;
     private boolean maskEnabled = false;
     private boolean dualScreenMode = false;
+    private boolean rainEnabled = false;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
 
-    private final ArrayList<MyAnchor> anchors = new ArrayList<>();
+    private final ArrayList<CircularAnchor> anchors = new ArrayList<>();
 
     private void prepareModel(){
         if(currentModel == null){
@@ -180,8 +192,53 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         //Binding tra XML e Java tramite ButterKnife
         ButterKnife.bind(this);
 
-        //Posso attivare il depth color solo se sto in single mode.
-        depthColorEnabled = !dualScreenMode && depthColorEnabled;
+        //SeekBar
+        //https://stackoverflow.com/questions/20762001/how-to-set-seekbar-min-and-max-value
+        speedSeekBar.setMax((int) ((CircularAnchor.MAX_SPEED-CircularAnchor.MIN_SPEED)/CircularAnchor.STEP_SPEED));
+        radiusSeekBar.setMax((int) ((CircularAnchor.MAX_RADIUS-CircularAnchor.MIN_RADIUS)/CircularAnchor.STEP_RADIUS));
+
+        speedSeekBar.setProgress((int) (CircularAnchor.DEFAULT_SPEED/CircularAnchor.STEP_SPEED));
+        radiusSeekBar.setProgress((int) (CircularAnchor.DEFAULT_RADIUS/CircularAnchor.STEP_RADIUS));
+
+        speedSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newSpeed = CircularAnchor.MIN_SPEED + (progress * CircularAnchor.STEP_SPEED);
+                for (CircularAnchor anchor : anchors){
+                    anchor.setAngularSpeed(newSpeed);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
+
+        radiusSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newRadius = CircularAnchor.MIN_RADIUS + (progress * CircularAnchor.STEP_RADIUS);
+                for (CircularAnchor anchor : anchors){
+                    anchor.setRadius(newRadius);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
 
         //Helpers
         displayRotationHelper = new DisplayRotationHelper(/*context=*/ this);
@@ -218,6 +275,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 case R.id.toggle_mask:
                     maskEnabled = !maskEnabled;
                     item.setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
+                    return true;
+
+                case R.id.toggle_rain:
+                    rainEnabled = !rainEnabled;
                     return true;
 
                 case R.id.toggle_dual_screen:{
@@ -292,6 +353,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         colorMapper = new ColorMapper(COLOR_SCALE_FACTOR, NUMBER_THREADS);
         colorMapper.prepare(RESOLUTION);
 
+        if(DEMO_MODE){
+            logTextView.setVisibility(View.GONE);
+            optionsMenu.removeItem(R.id.toggle_dual_screen);
+        }
+
         installRequested = false;
     }
 
@@ -323,6 +389,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 Config config = new Config(session);
                 config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
+                config.setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL);
                 config.setLightEstimationMode(lightEstimationMode);
                 session.configure(config);
 
@@ -564,26 +631,18 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 virtualObject.setPlasmaEnabled(depthColorEnabled);
                 virtualObjectShadow.setPlasmaEnabled(depthColorEnabled);
 
-                if(maskEnabled){
+                if(maskEnabled || depthColorEnabled){
+                    backgroundRenderer.loadInference(inference, RESOLUTION);
                     planeRenderer.loadInference(inference, RESOLUTION);
                     virtualObject.loadInference(inference, RESOLUTION);
                     virtualObjectShadow.loadInference(inference, RESOLUTION);
                 }
 
-                if (depthColorEnabled || dualScreenMode) {
-                    if(depthColorEnabled){
-                        backgroundRenderer.loadInference(inference, RESOLUTION);
-                        planeRenderer.loadInference(inference, RESOLUTION);
-                        virtualObject.loadInference(inference, RESOLUTION);
-                        virtualObjectShadow.loadInference(inference, RESOLUTION);
-                    }
-
-                    if(dualScreenMode){
-                        Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
-                        dualFragment.updateDepthImage(bitmapDepthColor);
-                        dualFragment.requestRender();
-                        bitmapDepthColor.recycle();
-                    }
+                if (dualScreenMode) {
+                    Bitmap bitmapDepthColor = colorMapper.getColorMap(inference, NUMBER_THREADS);
+                    dualFragment.updateDepthImage(bitmapDepthColor);
+                    dualFragment.requestRender();
+                    bitmapDepthColor.recycle();
                 }
             } else {
                 planeRenderer.setMaskEnabled(false);
@@ -668,14 +727,16 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
 
             // Visualize planes.
+            planeRenderer.setRainEnabled(rainEnabled);
+            planeRenderer.updateTime();
             planeRenderer.drawPlanes(
                     session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
 
             // Visualize anchors created by touch.
-            for (MyAnchor coloredAnchor : anchors) {
+            for (CircularAnchor circularAnchor : anchors) {
 
-                final Anchor anchor = coloredAnchor.getAnchor();
-                final float[] color = coloredAnchor.getColor();
+                final Anchor anchor = circularAnchor.getAnchor();
+                final float[] color = circularAnchor.getColor();
 
 
                 if (anchor.getTrackingState() != TrackingState.TRACKING) {
@@ -683,8 +744,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 }
 
                 //Modifico la anchorMatrix in modo che l'oggetto si muova.
-                coloredAnchor.update();
-                coloredAnchor.toMatrix(anchorMatrix, 0);
+                circularAnchor.update();
+                circularAnchor.toMatrix(anchorMatrix, 0);
 
                 // Update and draw the model and its shadow.
                 virtualObject.updateModelMatrix(anchorMatrix, OBJ_SCALE_FACTOR);
@@ -746,7 +807,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         // space. This anchor is created on the Plane to place the 3D model
                         // in the correct position relative both to the world and to the plane.
                         //Salvo anche il piano: in questo modo posso far muovere il mio oggetto nello spazio del piano.
-                        anchors.add(new MyAnchor(anchor, objColor, trackable));
+                        anchors.add(new CircularAnchor(anchor, objColor, trackable));
 
                         break;
                     }

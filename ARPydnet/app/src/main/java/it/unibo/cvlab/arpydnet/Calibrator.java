@@ -304,7 +304,7 @@ public class Calibrator {
      * @param cloud nuovola di punti di arcore
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose, ArrayList<MyAnchor> anchors){
+    public void calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose, ArrayList<CircularAnchor> anchors){
         if (cloud.getTimestamp() == lastTimestamp) {
             // Redundant call.
             return;
@@ -417,8 +417,8 @@ public class Calibrator {
 
         //Introduzione delle ancore
         if(anchors.size() > 0){
-            for(MyAnchor myAnchor : anchors){
-                Pose pose = myAnchor.getAnchor().getPose();
+            for(CircularAnchor circularAnchor : anchors){
+                Pose pose = circularAnchor.getAnchor().getPose();
                 pose.getTranslation(coords, 0);
                 coords[3] = 1.0f;
 

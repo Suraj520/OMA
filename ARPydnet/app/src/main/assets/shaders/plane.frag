@@ -13,13 +13,19 @@
  * limitations under the License.
  */
 
-precision highp float;
+precision mediump float;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;
 uniform sampler2D u_plasmaTexture;
+uniform sampler2D u_rainTexture;
+
+uniform float u_rainEnabled;
+uniform vec2 u_rainResolution;
+uniform float u_time;
 
 uniform float u_maskEnabled;
+
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
 
@@ -80,7 +86,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance){
+        if(distance > pydnetDistance + 0.05 || distance < pydnetDistance - 0.05){
             discard;
         }
     }
@@ -91,6 +97,27 @@ void main() {
     vec3 color = (control.r * dotScale > u_gridControl.x) ? u_dotColor.rgb
                : (control.g > u_gridControl.y)            ? u_lineColor.rgb * lineFade
                                                           : (u_lineColor.rgb * 0.25 * lineFade) ;
+
+    vec4 finalColor = vec4(color, v_texCoordAlpha.z * u_gridControl.w);
+
+    //https://greentec.github.io/rain-drops-en/
+    if(u_rainEnabled > 0.5){
+        vec2 res = u_rainResolution.xy / u_windowSize.xy;
+        vec2 uv = v_texCoordAlpha.xy;
+        vec2 n = texture2D(u_rainTexture, uv * .1).rg;
+
+        for (float r = 4.; r > 0.; r--) {
+            vec2 x = res * r * .009;
+            vec2 p = 6.28 * uv * x + (n - .5) * 2.5;
+            vec2 s = sin(p);
+            vec4 d = texture2D(u_rainTexture, floor(uv * x - 0.25 + 0.5) / x);
+            float t = (s.x + s.y) * max(0.,1.-fract(u_time * (d.b+.1)+d.g) * 2.);
+
+            if (d.r < (5.-r) * .12 && t > .5) {
+                finalColor.rgb = finalColor.rgb*t;
+            }
+        }
+    }
 
     if(u_plasmaEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
@@ -137,8 +164,8 @@ void main() {
         //Si tratta di una texture monodimensionale.
         vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
 
-        gl_FragColor = vec4(color * plasmaVector.rgb, v_texCoordAlpha.z * u_gridControl.w);
-    }else{
-        gl_FragColor = vec4(color, v_texCoordAlpha.z * u_gridControl.w);
+        finalColor.rgb = finalColor.rgb * plasmaVector.rgb;
     }
+
+    gl_FragColor = finalColor;
 }

@@ -5,7 +5,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-
     tools:context=".ARPydnet">
 
     <androidx.fragment.app.FragmentContainerView
@@ -29,14 +28,31 @@
         app:menu="@menu/main_menu"
         app:theme="@style/ThemeOverlay.AppCompat.ActionBar" />
 
-    <TextView
-        android:id="@+id/logTextView"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="25dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:layout_alignParentStart="true"
         android:layout_alignParentEnd="true"
-        android:layout_alignParentBottom="true"
-        android:text="@string/no_log_message"/>
+        android:layout_alignParentBottom="true">
+
+        <androidx.appcompat.widget.AppCompatSeekBar
+            android:id="@+id/speedSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="25dp"/>
+
+        <androidx.appcompat.widget.AppCompatSeekBar
+            android:id="@+id/radiusSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="25dp"/>
+
+        <TextView
+            android:id="@+id/logTextView"
+            android:layout_width="match_parent"
+            android:layout_height="25dp"
+            android:text="@string/no_log_message"/>
+    </LinearLayout>
+
 
 
 </RelativeLayout>

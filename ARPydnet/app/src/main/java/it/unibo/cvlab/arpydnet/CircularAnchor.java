@@ -4,22 +4,34 @@ import android.opengl.Matrix;
 
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Plane;
+import com.google.ar.core.Point;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Trackable;
 
-public class MyAnchor {
+public class CircularAnchor {
+    public static final float MIN_SPEED = 0.00f;
+    public static final float MAX_SPEED = 0.20f;
+    public static final float DEFAULT_SPEED = 0.05f;
+    public static final float STEP_SPEED = 0.02f;
+
+    public static final float MIN_RADIUS = 0.00f;
+    public static final float MAX_RADIUS = 0.30f;
+    public static final float DEFAULT_RADIUS = 0.10f;
+    public static final float STEP_RADIUS = 0.02f;
+
+
     private final Anchor anchor;
     private final float[] color;
 
-    private float radius = 0.2f;
-    private float angularSpeed = 0.05f;
+    private float radius = DEFAULT_RADIUS;
+    private float angularSpeed = DEFAULT_SPEED;
     private float currentAngle = 0.0f;
 
     private float x,y;
     private float[] normal;
     private float[] quaternion;
 
-    public MyAnchor(Anchor a, float[] color4f, Trackable trackable) {
+    public CircularAnchor(Anchor a, float[] color4f, Trackable trackable) {
         this.anchor = a;
         this.color = color4f;
         init(trackable);
@@ -55,13 +67,20 @@ public class MyAnchor {
     }
 
     public void init(Trackable trackable){
-        if(trackable instanceof Plane){
-            final Plane plane = (Plane)trackable;
+        if(trackable instanceof Plane) {
+            final Plane plane = (Plane) trackable;
             final Pose centerPose = plane.getCenterPose();
 
             normal = new float[3];
             centerPose.getTransformedAxis(1, 1.0f, normal, 0);
             quaternion = centerPose.getRotationQuaternion();
+        }else if(trackable instanceof Point){
+            final Point point = (Point) trackable;
+            final Pose pose = point.getPose();
+
+            normal = new float[3];
+            pose.getTransformedAxis(1, 1.0f, normal, 0);
+            quaternion = pose.getRotationQuaternion();
         }
     }
 

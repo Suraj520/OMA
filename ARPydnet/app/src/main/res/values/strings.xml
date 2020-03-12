@@ -12,6 +12,7 @@
     <string name="reset">Reset</string>
     <string name="toggle_dual_screen">Dual Scrren</string>
     <string name="quantizeMask">Quantize Mask</string>
+    <string name="toggle_rain">Rain</string>
 
     <string name="plane_finding">Searching for surfaces&#8230;</string>
 
