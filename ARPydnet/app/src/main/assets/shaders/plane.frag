@@ -158,7 +158,7 @@ void main() {
         //Normalizzazione.
         if(inferenceValue < 0.0) inferenceValue = 0.0;
         if(inferenceValue > 255.0) inferenceValue = 255.0;
-        inferenceValue = inferenceValue / 255.0f;
+        inferenceValue = inferenceValue / 255.0;
 
         //U: 0.0, 1.0, V: 0.0
         //Si tratta di una texture monodimensionale.
