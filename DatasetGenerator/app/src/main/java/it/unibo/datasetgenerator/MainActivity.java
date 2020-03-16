@@ -11,15 +11,24 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureFailure;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.TotalCaptureResult;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.os.ConditionVariable;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
+import android.view.Surface;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -32,6 +41,7 @@ import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.PointCloud;
 import com.google.ar.core.Session;
+import com.google.ar.core.SharedCamera;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.examples.java.common.helpers.PermissionsHelper;
 import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
@@ -56,7 +66,10 @@ import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -145,6 +158,199 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private SensorData pose6DofData;
 
     private int minNumPoints = 1;
+
+    //----------------------------------------------------------------------------------------------
+    //Roba aggiuntiva per TOF Sensor
+    //https://github.com/mpottinger/arcoreDepth_example
+
+    // ARCore shared camera instance, obtained from ARCore session that supports sharing.
+    private SharedCamera sharedCamera;
+
+    // Camera ID for the camera used by ARCore.
+    private String cameraId;
+
+    // Ensure GL surface draws only occur when new frames are available.
+    private final AtomicBoolean shouldUpdateSurfaceTexture = new AtomicBoolean(false);
+
+    private boolean TOF_available = false;
+
+    // Camera preview capture request builder
+    private CaptureRequest.Builder previewCaptureRequestBuilder;
+
+    // Camera capture session. Used by both non-AR and AR modes.
+    private CameraCaptureSession captureSession;
+
+    // Reference to the camera system service.
+    private CameraManager cameraManager;
+
+    // Camera device. Used by both non-AR and AR modes.
+    private CameraDevice cameraDevice;
+
+    // Prevent any changes to camera capture session after CameraManager.openCamera() is called, but
+    // before camera device becomes active.
+    private boolean captureSessionChangesPossible = true;
+
+    // A check mechanism to ensure that the camera closed properly so that the app can safely exit.
+    private final ConditionVariable safeToExitApp = new ConditionVariable();
+
+    // Camera device state callback.
+    private final CameraDevice.StateCallback cameraDeviceCallback =
+            new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(@NonNull CameraDevice cameraDevice) {
+                    Log.d(TAG, "Camera device ID " + cameraDevice.getId() + " opened.");
+                    MainActivity.this.cameraDevice = cameraDevice;
+                    createCameraPreviewSession();
+                }
+
+                @Override
+                public void onClosed(@NonNull CameraDevice cameraDevice) {
+                    Log.d(TAG, "Camera device ID " + cameraDevice.getId() + " closed.");
+                    MainActivity.this.cameraDevice = null;
+                    safeToExitApp.open();
+                }
+
+                @Override
+                public void onDisconnected(@NonNull CameraDevice cameraDevice) {
+                    Log.w(TAG, "Camera device ID " + cameraDevice.getId() + " disconnected.");
+                    cameraDevice.close();
+                    MainActivity.this.cameraDevice = null;
+                }
+
+                @Override
+                public void onError(@NonNull CameraDevice cameraDevice, int error) {
+                    Log.e(TAG, "Camera device ID " + cameraDevice.getId() + " error " + error);
+                    cameraDevice.close();
+                    MainActivity.this.cameraDevice = null;
+                    // Fatal error. Quit application.
+                    finish();
+                }
+            };
+
+    // Repeating camera capture session state callback.
+    CameraCaptureSession.StateCallback cameraCaptureCallback =
+            new CameraCaptureSession.StateCallback() {
+
+                // Called when the camera capture session is first configured after the app
+                // is initialized, and again each time the activity is resumed.
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    Log.d(TAG, "Camera capture session configured.");
+                    captureSession = session;
+                    setRepeatingCaptureRequest();
+                }
+
+                @Override
+                public void onSurfacePrepared(
+                        @NonNull CameraCaptureSession session, @NonNull Surface surface) {
+                    Log.d(TAG, "Camera capture surface prepared.");
+                }
+
+                @Override
+                public void onReady(@NonNull CameraCaptureSession session) {
+                    Log.d(TAG, "Camera capture session ready.");
+                }
+
+                @Override
+                public void onActive(@NonNull CameraCaptureSession session) {
+                    Log.d(TAG, "Camera capture session active.");
+                    resumeARCore();
+                    synchronized (MainActivity.this) {
+                        captureSessionChangesPossible = true;
+                        MainActivity.this.notify();
+                    }
+                }
+
+                @Override
+                public void onCaptureQueueEmpty(@NonNull CameraCaptureSession session) {
+                    Log.w(TAG, "Camera capture queue empty.");
+                }
+
+                @Override
+                public void onClosed(@NonNull CameraCaptureSession session) {
+                    Log.d(TAG, "Camera capture session closed.");
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    Log.e(TAG, "Failed to configure camera capture session.");
+                }
+            };
+
+    // Repeating camera capture session capture callback.
+    private final CameraCaptureSession.CaptureCallback captureSessionCallback =
+            new CameraCaptureSession.CaptureCallback() {
+
+                @Override
+                public void onCaptureCompleted(
+                        @NonNull CameraCaptureSession session,
+                        @NonNull CaptureRequest request,
+                        @NonNull TotalCaptureResult result) {
+                    shouldUpdateSurfaceTexture.set(true);
+                }
+
+                @Override
+                public void onCaptureBufferLost(
+                        @NonNull CameraCaptureSession session,
+                        @NonNull CaptureRequest request,
+                        @NonNull Surface target,
+                        long frameNumber) {
+                    Log.e(TAG, "onCaptureBufferLost: " + frameNumber);
+                }
+
+                @Override
+                public void onCaptureFailed(
+                        @NonNull CameraCaptureSession session,
+                        @NonNull CaptureRequest request,
+                        @NonNull CaptureFailure failure) {
+                    Log.e(TAG, "onCaptureFailed: " + failure.getFrameNumber() + " " + failure.getReason());
+                }
+
+                @Override
+                public void onCaptureSequenceAborted(
+                        @NonNull CameraCaptureSession session, int sequenceId) {
+                    Log.e(TAG, "onCaptureSequenceAborted: " + sequenceId + " " + session);
+                }
+            };
+
+    private void createCameraPreviewSession() {
+        Log.v("TAG" + " createCameraPreviewSession: ", "starting camera preview session.");
+        Log.e("TAG" + " createCameraPreviewSession: ", "starting camera preview se<ssion.");
+        try {
+
+            // Create an ARCore compatible capture request using `TEMPLATE_RECORD`.
+            previewCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+
+            // Build surfaces list, starting with ARCore provided surfaces.
+            List<Surface> surfaceList = sharedCamera.getArCoreSurfaces();
+            Log.e("TAG" + " createCameraPreviewSession: ", "surfaceList: sharedCamera.getArCoreSurfaces(): " + surfaceList.size());
+
+            // Add a CPU image reader surface. On devices that don't support CPU image access, the image
+            // may arrive significantly later, or not arrive at all.
+            if (TOF_available) surfaceList.add(TOFImageReader.imageReader.getSurface());
+            // Surface list should now contain three surfaces:
+            // 0. sharedCamera.getSurfaceTexture()
+            // 1. …
+            // 2. depthImageReader.getSurface()
+
+            // Add ARCore surfaces and CPU image surface targets.
+            for (Surface surface : surfaceList) {
+                previewCaptureRequestBuilder.addTarget(surface);
+            }
+
+            // Wrap our callback in a shared camera callback.
+            CameraCaptureSession.StateCallback wrappedCallback = sharedCamera.createARSessionStateCallback(cameraCaptureCallback, backgroundHandler);
+
+            // Create camera capture session for camera preview using ARCore wrapped callback.
+            cameraDevice.createCaptureSession(surfaceList, wrappedCallback, backgroundHandler);
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "CameraAccessException", e);
+        }
+
+
+    }
+
+    //----------------------------------------------------------------------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -280,7 +486,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 }
 
                 // Create the session.
-                session = new Session(/* context= */ this);
+                session = new Session(this, EnumSet.of(Session.Feature.SHARED_CAMERA));
 
                 Config.LightEstimationMode lightEstimationMode =
                         Config.LightEstimationMode.DISABLED;
