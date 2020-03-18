@@ -17,6 +17,7 @@ package com.google.ar.core.examples.java.common.rendering;
 import android.content.Context;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -79,13 +80,11 @@ public class BackgroundRenderer {
     //Riferimento alle coordinate delle texture.
     private int backgroundTexCoordAttribute;
 
-
     private int[] textures = new int[1];
 
     public int getBackgroundTextureId() {
         return textures[0];
     }
-
 
     /**
      * Allocates and initializes OpenGL resources needed by the background renderer. Must be called on
@@ -97,18 +96,16 @@ public class BackgroundRenderer {
         // Generate the textures.
         GLES20.glGenTextures(textures.length, textures, 0);
 
-        int textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
-
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(textureTarget, getBackgroundTextureId());
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
 
-        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
 
@@ -206,7 +203,6 @@ public class BackgroundRenderer {
         GLES20.glUseProgram(backgroundProgram);
 
         GLES20.glUniform1i(backgroundTextureUniform,  0);
-
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
 
@@ -218,7 +214,6 @@ public class BackgroundRenderer {
         GLES20.glVertexAttribPointer(
                 backgroundTexCoordAttribute, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, backgroundTexCoordsBuffer);
 
-
         // Enable vertex arrays
         GLES20.glEnableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
@@ -228,6 +223,9 @@ public class BackgroundRenderer {
         // Disable vertex arrays
         GLES20.glDisableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glDisableVertexAttribArray(backgroundTexCoordAttribute);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         // Restore the depth state for further drawing.
         GLES20.glDepthMask(true);

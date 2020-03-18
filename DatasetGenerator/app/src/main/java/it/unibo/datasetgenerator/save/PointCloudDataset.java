@@ -185,7 +185,7 @@ public class PointCloudDataset {
     @SerializedName("pose6DofData")
     private SensorData pose6DofData;
 
-    public PointCloudDataset(MyPose cameraPose, MyPose cameraDisplayPose, MyPose sensorPose, long pointCloudTimestamp, Point[] visiblePoints, float minDistance, float maxDistance, String origin, int numPoints, int numVisiblePoints, int width, int height, float nearPlane, float farPlane, float[] viewmtx, float[] projmtx) {
+    private PointCloudDataset(MyPose cameraPose, MyPose cameraDisplayPose, MyPose sensorPose, long pointCloudTimestamp, Point[] visiblePoints, float minDistance, float maxDistance, String origin, int numPoints, int numVisiblePoints, int width, int height, float nearPlane, float farPlane, float[] viewmtx, float[] projmtx) {
         this.cameraPose = cameraPose;
         this.cameraDisplayPose = cameraDisplayPose;
         this.sensorPose = sensorPose;

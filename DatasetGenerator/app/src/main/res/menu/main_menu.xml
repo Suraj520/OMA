@@ -9,6 +9,12 @@
         app:showAsAction="always"/>
 
     <item
+        android:id="@+id/toggle_tof"
+        android:icon="@drawable/ic_tof_off"
+        android:title="@string/showSetNumPointDialog"
+        app:showAsAction="always"/>
+
+    <item
         android:id="@+id/showSetNumPointDialog"
         android:icon="@drawable/ic_set"
         android:title="@string/showSetNumPointDialog"

@@ -19,5 +19,6 @@
 
     <string name="log_default_message">No log</string>
     <string name="log_numPoints">Punti nello schermo: %1$d, minimo: %2$d</string>
+    <string name="tof_path">/tof/</string>
 
 </resources>

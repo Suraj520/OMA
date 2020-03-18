@@ -377,8 +377,6 @@ public class BackgroundRenderer {
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
         GLES20.glEnableVertexAttribArray(plasmaTexCoordAttribute);
 
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 3");
-
         //Binding del coefficiente: Devo farlo falso per evitare colorazioni nel framebuffer.
         GLES20.glUniform1f(plasmaEnabledUniform, 0.0f);
 
@@ -388,15 +386,11 @@ public class BackgroundRenderer {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
 
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 4");
-
         //Binding del coefficiente:
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
 
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
-
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 5");
 
         // Disable vertex arrays
         GLES20.glDisableVertexAttribArray(backgroundPositionAttribute);
