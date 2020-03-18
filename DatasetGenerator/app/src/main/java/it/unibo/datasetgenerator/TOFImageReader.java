@@ -25,6 +25,8 @@ public class TOFImageReader implements ImageReader.OnImageAvailableListener {
     private HandlerThread backgroundThread;
     // Looper handler.
     private Handler backgroundHandler;
+    // Last acquired image
+    private Image lastImage;
 
     public ByteBuffer depth16_raw;
 
@@ -46,15 +48,19 @@ public class TOFImageReader implements ImageReader.OnImageAvailableListener {
     // CPU image reader callback.
     @Override
     public void onImageAvailable(ImageReader imageReader) {
-        Image image  = imageReader.acquireLatestImage();
-        if (image == null) {
+        if (lastImage != null) {
+            lastImage.close();
+        }
+
+        lastImage = imageReader.acquireLatestImage();
+        if (lastImage == null) {
             Log.w(TAG, "onImageAvailable: Skipping null image.");
             return;
         }
         else{
-            if(image.getFormat() == ImageFormat.DEPTH16){
-                this.timestamp = image.getTimestamp();
-                depth16_raw = image.getPlanes()[0].getBuffer().asReadOnlyBuffer();
+            if(lastImage.getFormat() == ImageFormat.DEPTH16){
+                this.timestamp = lastImage.getTimestamp();
+                depth16_raw = lastImage.getPlanes()[0].getBuffer().asReadOnlyBuffer();
                 // copy raw undecoded DEPTH16 format depth data to NativeBuffer
                 frameCount++;
             }
@@ -62,7 +68,6 @@ public class TOFImageReader implements ImageReader.OnImageAvailableListener {
                 Log.w(TAG, "onImageAvailable: depth image not in DEPTH16 format, skipping image");
             }
         }
-        image.close();
     }
 
     // Start background handler thread, used to run callbacks without blocking UI thread.
@@ -74,6 +79,10 @@ public class TOFImageReader implements ImageReader.OnImageAvailableListener {
 
     // Stop background handler thread.
     public void stopBackgroundThread() {
+        if (lastImage != null) {
+            lastImage.close();
+        }
+
         if (this.backgroundThread != null) {
             this.backgroundThread.quitSafely();
             try {
