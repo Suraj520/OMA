@@ -31,7 +31,7 @@ public class TOFDataset {
             if(depthRange < minDistance) minDistance = depthRange;
             if(depthRange > maxDistance) maxDistance = depthRange;
 
-            Point point = new Point(x,y,Float.NaN, Float.NaN, Float.NaN, depthPercentage, depthRange / 1000.0f);
+            Point point = new Point(x,y,0, 0, 0, depthPercentage, depthRange / 1000.0f);
             points.add(point);
 
             if(x < reader.WIDTH){
