@@ -43,7 +43,9 @@ public class TOFDataset {
             }
         }
 
-        return new TOFDataset("top-left", reader.timestamp, minDistance / 1000.0f, maxDistance / 1000.0f, reader.WIDTH, reader.HEIGHT, points.toArray(new Point[0]));
+        Point[] pointsArray = points.toArray(new Point[0]);
+
+        return new TOFDataset("top-left", reader.timestamp, minDistance / 1000.0f, maxDistance / 1000.0f, reader.WIDTH, reader.HEIGHT, pointsArray, pointsArray.length);
     }
 
     @SerializedName("origin")
@@ -65,10 +67,13 @@ public class TOFDataset {
     @SerializedName("points")
     private Point[] points;
 
+    @SerializedName("numPoints")
+    private int numPoints;
+
     @SerializedName("displayRotation")
     private int displayRotation;
 
-    private TOFDataset(String origin, long tofTimestamp, float minDistance, float maxDistance, int width, int height, Point[] points) {
+    private TOFDataset(String origin, long tofTimestamp, float minDistance, float maxDistance, int width, int height, Point[] points, int numPoints) {
         this.origin = origin;
         this.tofTimestamp = tofTimestamp;
         this.minDistance = minDistance;
@@ -76,6 +81,7 @@ public class TOFDataset {
         this.width = width;
         this.height = height;
         this.points = points;
+        this.numPoints = numPoints;
     }
 
     public String getOrigin() {
@@ -104,6 +110,10 @@ public class TOFDataset {
 
     public Point[] getPoints() {
         return points;
+    }
+
+    public int getNumPoints() {
+        return numPoints;
     }
 
     public int getDisplayRotation() {

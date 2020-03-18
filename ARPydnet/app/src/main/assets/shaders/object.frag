@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-precision mediump float;
+precision highp float;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;

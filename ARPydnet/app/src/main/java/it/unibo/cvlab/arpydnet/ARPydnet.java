@@ -513,7 +513,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // Create the texture and pass it to ARCore session to be filled during update().
             backgroundRenderer.createOnGlThread(/*context=*/ this);
 
-            planeRenderer.createOnGlThread(/*context=*/ this, "models/trigrid.png");
+            planeRenderer.createOnGlThread(/*context=*/ this, "models/leaf.png", "models/rain.png");
             pointCloudRenderer.createOnGlThread(/*context=*/ this);
 
             virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");

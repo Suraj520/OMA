@@ -211,7 +211,7 @@ public class PlaneRenderer {
      * @param context Needed to access shader source and texture PNG.
      * @param gridDistanceTextureName Name of the PNG file containing the grid texture.
      */
-    public void createOnGlThread(Context context, String gridDistanceTextureName) throws IOException {
+    public void createOnGlThread(Context context, String gridDistanceTextureName, String rainTextureName) throws IOException {
         int vertexShader =
                 ShaderUtil.loadGLShader(TAG, context, GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
         int passthroughShader =
@@ -230,7 +230,7 @@ public class PlaneRenderer {
                 BitmapFactory.decodeStream(context.getAssets().open(gridDistanceTextureName));
 
         Bitmap rainBitmap =
-                BitmapFactory.decodeStream(context.getAssets().open("models/rain.png"));
+                BitmapFactory.decodeStream(context.getAssets().open(rainTextureName));
 
         GLES20.glGenTextures(textures.length, textures, 0);
 

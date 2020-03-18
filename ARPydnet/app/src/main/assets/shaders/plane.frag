@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-precision mediump float;
+precision highp float;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;
@@ -86,7 +86,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance + 0.05 || distance < pydnetDistance - 0.05){
+        if(distance > pydnetDistance + 0.05){
             discard;
         }
     }
