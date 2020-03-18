@@ -17,6 +17,11 @@ It uses ARCore [PointCloud](https://developers.google.com/ar/reference/java/arco
 
 ### Prerequisites
 
+**Build**
+
+- Android SDK 27 or newer
+- Android NDK 20 or newer
+
 **ARPydnet** and **Dataset Generator** have some prerequisites to run on your smartphone:
 
 - Supported ARCore smartphone
@@ -51,4 +56,4 @@ See also the list of [contributors](https://github.com/FilippoAleotti/OMA/graphs
 
 ## License
 
-To Be Defined
+[Apache License 2.0](https://github.com/FilippoAleotti/OMA/blob/master/LICENSE)
