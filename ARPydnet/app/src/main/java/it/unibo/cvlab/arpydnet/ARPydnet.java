@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -91,11 +92,26 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     @BindView(R.id.optionsToolbar)
     Toolbar optionsToolbar;
 
+    @BindView(R.id.settingsContainer)
+    LinearLayout settingsContainer;
+
+    @BindView(R.id.lowerDeltaPlaneSeekBar)
+    AppCompatSeekBar lowerDeltaPlaneSeekBar;
+
+    @BindView(R.id.upperDeltaPlaneSeekBar)
+    AppCompatSeekBar upperDeltaPlaneSeekBar;
+
+    @BindView(R.id.lowerDeltaObjectSeekBar)
+    AppCompatSeekBar lowerDeltaObjectSeekBar;
+
     @BindView(R.id.speedSeekBar)
     AppCompatSeekBar speedSeekBar;
 
     @BindView(R.id.radiusSeekBar)
     AppCompatSeekBar radiusSeekBar;
+
+    @BindView(R.id.sizeSeekBar)
+    AppCompatSeekBar sizeSeekBar;
 
     @BindView(R.id.logTextView)
     TextView logTextView;
@@ -127,7 +143,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     //Ricavo il numero di thread massimi.
     private static int NUMBER_THREADS = Runtime.getRuntime().availableProcessors();
-    private static final float OBJ_SCALE_FACTOR = 1.0f;
 
     private Model currentModel = null;
     private FloatBuffer inference = null;
@@ -194,11 +209,20 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
         //SeekBar
         //https://stackoverflow.com/questions/20762001/how-to-set-seekbar-min-and-max-value
-        speedSeekBar.setMax((int) ((CircularAnchor.MAX_SPEED-CircularAnchor.MIN_SPEED)/CircularAnchor.STEP_SPEED));
-        radiusSeekBar.setMax((int) ((CircularAnchor.MAX_RADIUS-CircularAnchor.MIN_RADIUS)/CircularAnchor.STEP_RADIUS));
+        speedSeekBar.setMax((int) ((CircularAnchor.MAX_SPEED - CircularAnchor.MIN_SPEED) / CircularAnchor.STEP_SPEED));
+        radiusSeekBar.setMax((int) ((CircularAnchor.MAX_RADIUS - CircularAnchor.MIN_RADIUS) / CircularAnchor.STEP_RADIUS));
+        lowerDeltaPlaneSeekBar.setMax((int) ((PlaneRenderer.MAX_LOWER_DELTA - PlaneRenderer.MIN_LOWER_DELTA) / PlaneRenderer.STEP_LOWER_DELTA));
+        upperDeltaPlaneSeekBar.setMax((int) ((PlaneRenderer.MAX_UPPER_DELTA - PlaneRenderer.MIN_UPPER_DELTA) / PlaneRenderer.STEP_UPPER_DELTA));
+        lowerDeltaObjectSeekBar.setMax((int) ((ObjectRenderer.MAX_LOWER_DELTA - ObjectRenderer.MIN_LOWER_DELTA) / ObjectRenderer.STEP_LOWER_DELTA));
+        sizeSeekBar.setMax((int) ((ObjectRenderer.MAX_OBJ_SCALE_FACTOR - ObjectRenderer.MIN_OBJ_SCALE_FACTOR) / ObjectRenderer.STEP_OBJ_SCALE_FACTOR));
 
-        speedSeekBar.setProgress((int) (CircularAnchor.DEFAULT_SPEED/CircularAnchor.STEP_SPEED));
-        radiusSeekBar.setProgress((int) (CircularAnchor.DEFAULT_RADIUS/CircularAnchor.STEP_RADIUS));
+        speedSeekBar.setProgress((int) ((CircularAnchor.DEFAULT_SPEED - CircularAnchor.MIN_SPEED) / CircularAnchor.STEP_SPEED));
+        radiusSeekBar.setProgress((int) ((CircularAnchor.DEFAULT_RADIUS - CircularAnchor.MIN_RADIUS) / CircularAnchor.STEP_RADIUS));
+        lowerDeltaPlaneSeekBar.setProgress((int) ((PlaneRenderer.DEFAULT_LOWER_DELTA - PlaneRenderer.MIN_LOWER_DELTA) / PlaneRenderer.STEP_LOWER_DELTA));
+        upperDeltaPlaneSeekBar.setProgress((int) ((PlaneRenderer.DEFAULT_UPPER_DELTA - PlaneRenderer.MIN_UPPER_DELTA) / PlaneRenderer.STEP_UPPER_DELTA));
+        lowerDeltaObjectSeekBar.setProgress((int) ((ObjectRenderer.DEFAULT_LOWER_DELTA - ObjectRenderer.MIN_LOWER_DELTA) / ObjectRenderer.STEP_LOWER_DELTA));
+        sizeSeekBar.setProgress((int) ((ObjectRenderer.DEFAULT_OBJ_SCALE_FACTOR - ObjectRenderer.MIN_OBJ_SCALE_FACTOR) / ObjectRenderer.STEP_OBJ_SCALE_FACTOR));
+
 
         speedSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -210,14 +234,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStartTrackingTouch(SeekBar seekBar) { }
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStopTrackingTouch(SeekBar seekBar) { }
         });
 
         radiusSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -230,14 +250,68 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
+            public void onStartTrackingTouch(SeekBar seekBar) { }
 
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
+        lowerDeltaPlaneSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newDelta = PlaneRenderer.MIN_LOWER_DELTA + (progress * PlaneRenderer.STEP_LOWER_DELTA);
+                planeRenderer.setLowerDelta(newDelta);
             }
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
+            public void onStartTrackingTouch(SeekBar seekBar) { }
 
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
+        upperDeltaPlaneSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newDelta = PlaneRenderer.MIN_UPPER_DELTA + (progress * PlaneRenderer.STEP_UPPER_DELTA);
+                planeRenderer.setUpperDelta(newDelta);
             }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) { }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
+        lowerDeltaObjectSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newDelta = ObjectRenderer.MIN_LOWER_DELTA + (progress * ObjectRenderer.STEP_LOWER_DELTA);
+                virtualObject.setLowerDelta(newDelta);
+                virtualObjectShadow.setLowerDelta(newDelta);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) { }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
+        sizeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float newSize = ObjectRenderer.MIN_OBJ_SCALE_FACTOR + (progress * ObjectRenderer.STEP_OBJ_SCALE_FACTOR);
+                virtualObject.setObjScaleFactor(newSize);
+                virtualObjectShadow.setObjScaleFactor(newSize);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) { }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) { }
         });
 
         //Helpers
@@ -279,6 +353,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 case R.id.toggle_rain:
                     rainEnabled = !rainEnabled;
+                    return true;
+
+                case R.id.toggle_settings:
+                    settingsContainer.setVisibility(settingsContainer.getVisibility() == View.VISIBLE ? View.INVISIBLE : View.VISIBLE);
                     return true;
 
                 case R.id.toggle_dual_screen:{
@@ -354,7 +432,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         colorMapper.prepare(RESOLUTION);
 
         if(DEMO_MODE){
-            logTextView.setVisibility(View.GONE);
+//            logTextView.setVisibility(View.GONE);
             optionsMenu.removeItem(R.id.toggle_dual_screen);
         }
 
@@ -748,8 +826,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 circularAnchor.toMatrix(anchorMatrix, 0);
 
                 // Update and draw the model and its shadow.
-                virtualObject.updateModelMatrix(anchorMatrix, OBJ_SCALE_FACTOR);
-                virtualObjectShadow.updateModelMatrix(anchorMatrix, OBJ_SCALE_FACTOR);
+                virtualObject.updateModelMatrix(anchorMatrix);
+                virtualObjectShadow.updateModelMatrix(anchorMatrix);
 
                 virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, color);
                 virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, color);
@@ -874,7 +952,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     }
 
     private void setGeneralLogMessage(int numPoints){
-        String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints, calibrator.getMinDistance(), calibrator.getMaxDistance());
+        String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints, calibrator.getMinDistance(), calibrator.getMaxDistance(), planeRenderer.getUpperDelta(), planeRenderer.getLowerDelta(), virtualObject.getLowerDelta());
         logTextView.setText(text);
     }
 

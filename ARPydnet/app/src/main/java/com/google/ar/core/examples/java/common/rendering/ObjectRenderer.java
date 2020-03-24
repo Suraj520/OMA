@@ -42,6 +42,16 @@ import java.nio.ShortBuffer;
 public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
 
+    public static final float MIN_LOWER_DELTA = -0.50f;
+    public static final float MAX_LOWER_DELTA = 0.50f;
+    public static final float DEFAULT_LOWER_DELTA = 0.05f;
+    public static final float STEP_LOWER_DELTA = 0.02f;
+
+    public static final float MIN_OBJ_SCALE_FACTOR = 0.10f;
+    public static final float MAX_OBJ_SCALE_FACTOR = 2.00f;
+    public static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
+    public static final float STEP_OBJ_SCALE_FACTOR = 0.1f;
+
     /**
      * Blend mode.
      *
@@ -140,6 +150,23 @@ public class ObjectRenderer {
         this.maskEnabled = maskEnabled;
     }
 
+    private float objScaleFactor = DEFAULT_OBJ_SCALE_FACTOR;
+
+    public void setObjScaleFactor(float objScaleFactor){
+        this.objScaleFactor = objScaleFactor;
+    }
+
+    private float lowerDelta = DEFAULT_LOWER_DELTA;
+    private int lowerDeltaUniform;
+
+    public void setLowerDelta(float lowerDelta) {
+        this.lowerDelta = lowerDelta;
+    }
+
+    public float getLowerDelta() {
+        return lowerDelta;
+    }
+
     private int plasmaEnabledUniform;
     private int plasmaTextureUniform;
     private int plasmaFactorUniform;
@@ -213,6 +240,8 @@ public class ObjectRenderer {
         maskEnabledUniform = GLES20.glGetUniformLocation(program, "u_maskEnabled");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(program, "u_plasmaEnabled");
         plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
+
+        lowerDeltaUniform = GLES20.glGetUniformLocation(program, "u_lowerDelta");
 
         windowSizeUniform = GLES20.glGetUniformLocation(program, "u_windowSize");
 
@@ -353,6 +382,16 @@ public class ObjectRenderer {
      * Updates the object model matrix and applies scaling.
      *
      * @param modelMatrix A 4x4 model-to-world transformation matrix, stored in column-major order.
+     * @see android.opengl.Matrix
+     */
+    public void updateModelMatrix(float[] modelMatrix) {
+        updateModelMatrix(modelMatrix, objScaleFactor);
+    }
+
+    /**
+     * Updates the object model matrix and applies scaling.
+     *
+     * @param modelMatrix A 4x4 model-to-world transformation matrix, stored in column-major order.
      * @param scaleFactor A separate scaling factor to apply before the {@code modelMatrix}.
      * @see android.opengl.Matrix
      */
@@ -451,6 +490,8 @@ public class ObjectRenderer {
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
         GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
+
+        GLES20.glUniform1f(lowerDeltaUniform, lowerDelta);
 
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, screenData, 0);
         GLES20.glUniform2f(windowSizeUniform, screenData[2], screenData[3]);

@@ -26,6 +26,9 @@ uniform float u_time;
 
 uniform float u_maskEnabled;
 
+uniform float u_upperDelta;
+uniform float u_lowerDelta;
+
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
 
@@ -86,7 +89,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance + 0.05){
+        if(distance > pydnetDistance + u_lowerDelta || distance < pydnetDistance - u_upperDelta){
             discard;
         }
     }

@@ -43,6 +43,16 @@ import it.unibo.cvlab.pydnet.Utils;
 public class PlaneRenderer {
     private static final String TAG = PlaneRenderer.class.getSimpleName();
 
+    public static final float MIN_LOWER_DELTA = -0.50f;
+    public static final float MAX_LOWER_DELTA = 0.50f;
+    public static final float DEFAULT_LOWER_DELTA = 0.05f;
+    public static final float STEP_LOWER_DELTA = 0.02f;
+
+    public static final float MIN_UPPER_DELTA = -0.50f;
+    public static final float MAX_UPPER_DELTA = 0.50f;
+    public static final float DEFAULT_UPPER_DELTA = 0.10f;
+    public static final float STEP_UPPER_DELTA = 0.02f;
+
     // Shader names.
     private static final String VERTEX_SHADER_NAME = "shaders/plane.vert";
     private static final String FRAGMENT_SHADER_NAME = "shaders/plane.frag";
@@ -139,6 +149,25 @@ public class PlaneRenderer {
 
     public void setMaskEnabled(boolean maskEnabled) {
         this.maskEnabled = maskEnabled;
+    }
+
+    private float upperDelta = DEFAULT_LOWER_DELTA, lowerDelta = DEFAULT_LOWER_DELTA;
+    private int upperDeltaUniform, lowerDeltaUniform;
+
+    public void setUpperDelta(float upperDelta) {
+        this.upperDelta = upperDelta;
+    }
+
+    public void setLowerDelta(float lowerDelta) {
+        this.lowerDelta = lowerDelta;
+    }
+
+    public float getUpperDelta() {
+        return upperDelta;
+    }
+
+    public float getLowerDelta() {
+        return lowerDelta;
     }
 
     private int plasmaEnabledUniform;
@@ -307,6 +336,9 @@ public class PlaneRenderer {
         //Custom.
         maskEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_maskEnabled");
         inferenceTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_inferenceTexture");
+
+        upperDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_upperDelta");
+        lowerDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_lowerDelta");
 
         plasmaTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaTexture");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaEnabled");
@@ -535,6 +567,9 @@ public class PlaneRenderer {
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
         GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
+
+        GLES20.glUniform1f(upperDeltaUniform, upperDelta);
+        GLES20.glUniform1f(lowerDeltaUniform, lowerDelta);
 
         GLES20.glUniform1f(rainEnabledUniform, rainEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(timeUniform, time);

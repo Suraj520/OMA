@@ -23,6 +23,8 @@ uniform float u_maskEnabled;
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
 
+uniform float u_lowerDelta;
+
 uniform vec2 u_windowSize;
 
 uniform vec4 u_lightingParameters;
@@ -90,7 +92,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance + 0.05){
+        if(distance > pydnetDistance + u_lowerDelta){
             discard;
         }
     }

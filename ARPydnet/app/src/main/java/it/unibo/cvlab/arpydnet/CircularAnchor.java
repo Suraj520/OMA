@@ -10,12 +10,12 @@ import com.google.ar.core.Trackable;
 
 public class CircularAnchor {
     public static final float MIN_SPEED = 0.00f;
-    public static final float MAX_SPEED = 0.20f;
+    public static final float MAX_SPEED = 0.40f;
     public static final float DEFAULT_SPEED = 0.05f;
     public static final float STEP_SPEED = 0.02f;
 
     public static final float MIN_RADIUS = 0.00f;
-    public static final float MAX_RADIUS = 0.30f;
+    public static final float MAX_RADIUS = 0.50f;
     public static final float DEFAULT_RADIUS = 0.10f;
     public static final float STEP_RADIUS = 0.02f;
 

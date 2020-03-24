@@ -17,6 +17,14 @@
     <string name="plane_finding">Searching for surfaces&#8230;</string>
 
     <string name="no_log_message">No log</string>
-    <string name="log_general">SF: %1$f. Punti nello schermo: %2$d. Distanze punti (min,max): (%3$f,%4$f) m</string>
+    <string name="log_general">SF: %1$f. Punti nello schermo: %2$d. Distanze punti (min,max): (%3$f,%4$f) m PUD %5$f PLD %6$f OLD %7$f</string>
+
+    <string name="upperDeltaPlane">Upper delta plane:</string>
+    <string name="lowerDeltaPlane">Lower delta plane:</string>
+    <string name="lowerDeltaObject">Lower delta object:</string>
+    <string name="speedObject">Speed:</string>
+    <string name="radiusObject">Radius:</string>
+    <string name="sizeObject">Obj Size:</string>
+    <string name="toggle_settings">Settings</string>
 
 </resources>

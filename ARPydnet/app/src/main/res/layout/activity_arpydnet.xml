@@ -29,6 +29,7 @@
         app:theme="@style/ThemeOverlay.AppCompat.ActionBar" />
 
     <LinearLayout
+        android:id="@+id/settingsContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -36,20 +37,115 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true">
 
-        <androidx.appcompat.widget.AppCompatSeekBar
-            android:id="@+id/speedSeekBar"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="25dp"/>
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-        <androidx.appcompat.widget.AppCompatSeekBar
-            android:id="@+id/radiusSeekBar"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/upperDeltaPlane"/>
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/upperDeltaPlaneSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="25dp"/>
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/lowerDeltaPlane"/>
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/lowerDeltaPlaneSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/lowerDeltaObject"/>
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/lowerDeltaObjectSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speedObject"/>
+
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/speedSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/radiusObject"/>
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/radiusSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/sizeObject"/>
+
+            <androidx.appcompat.widget.AppCompatSeekBar
+                android:id="@+id/sizeSeekBar"
+                android:layout_width="fill_parent"
+                android:layout_height="25dp"/>
+
+        </LinearLayout>
 
         <TextView
             android:id="@+id/logTextView"
             android:layout_width="match_parent"
             android:layout_height="25dp"
+            android:textSize="10sp"
             android:text="@string/no_log_message"/>
     </LinearLayout>
 
