@@ -4,7 +4,7 @@ android {
     compileSdkVersion 29
     buildToolsVersion "29.0.3"
     defaultConfig {
-        applicationId "it.unibo.datasetgenerator"
+        applicationId "it.unibo.cvlab.datasetgenerator"
         minSdkVersion 27
         targetSdkVersion 29
         versionCode 1

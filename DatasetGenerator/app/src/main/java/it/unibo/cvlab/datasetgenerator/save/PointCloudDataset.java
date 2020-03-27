@@ -1,4 +1,4 @@
-package it.unibo.datasetgenerator.save;
+package it.unibo.cvlab.datasetgenerator.save;
 
 import android.opengl.Matrix;
 

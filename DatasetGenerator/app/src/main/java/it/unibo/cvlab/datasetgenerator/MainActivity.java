@@ -1,4 +1,4 @@
-package it.unibo.datasetgenerator;
+package it.unibo.cvlab.datasetgenerator;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -83,9 +83,9 @@ import javax.microedition.khronos.opengles.GL10;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
-import it.unibo.datasetgenerator.save.PointCloudDataset;
-import it.unibo.datasetgenerator.save.SensorData;
-import it.unibo.datasetgenerator.save.TOFDataset;
+import it.unibo.cvlab.datasetgenerator.save.PointCloudDataset;
+import it.unibo.cvlab.datasetgenerator.save.SensorData;
+import it.unibo.cvlab.datasetgenerator.save.TOFDataset;
 
 public class MainActivity extends AppCompatActivity implements GLSurfaceView.Renderer, SensorEventListener {
 

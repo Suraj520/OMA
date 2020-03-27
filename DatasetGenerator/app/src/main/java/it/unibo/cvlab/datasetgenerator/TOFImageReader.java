@@ -1,4 +1,4 @@
-package it.unibo.datasetgenerator;
+package it.unibo.cvlab.datasetgenerator;
 
 
 import android.graphics.ImageFormat;

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-package it.unibo.datasetgenerator;
+package it.unibo.cvlab.datasetgenerator;
 
 import android.graphics.Bitmap;
 import android.text.TextUtils;
