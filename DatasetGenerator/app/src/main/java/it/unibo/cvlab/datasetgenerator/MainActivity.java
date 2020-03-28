@@ -110,8 +110,6 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     @BindView(R.id.logTextView)
     TextView logTextView;
 
-    private Unbinder unbinder;
-
     private boolean installRequested;
     private Session session;
 
@@ -619,7 +617,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         tofPathString = getString(tofPath);
 
         //Binding tra XML e Java tramite ButterKnife
-        unbinder = ButterKnife.bind(this);
+        ButterKnife.bind(this);
 
         setNumPointsLog(0);
 

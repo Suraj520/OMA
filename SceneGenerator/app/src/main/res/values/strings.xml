@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">SceneGenerator</string>
+
+    <string name="toggle_record">Registra</string>
+
+    <string name="searching_plane_message">Searching for planes…</string>
+    <string name="camera_not_available">Camera not available. Try restarting the app.</string>
+
+    <string name="dataset_path">dataset/</string>
+    <string name="images_path">/images/</string>
+    <string name="poses_path">/poses/</string>
+
 </resources>
