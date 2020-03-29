@@ -14,6 +14,7 @@ import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.widget.Toast;
 
 import com.google.android.material.snackbar.Snackbar;
@@ -22,10 +23,13 @@ import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
+import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
+import com.google.ar.core.Point;
 import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
+import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
@@ -46,6 +50,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 
@@ -70,6 +75,8 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     @BindView(R.id.optionsToolbar)
     Toolbar optionsToolbar;
+
+    private Menu optionsMenu;
 
     private Snackbar loadingMessageSnackbar = null;
 
@@ -111,6 +118,8 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private IntBuffer pixelDataBuffer;
     private int[] bitmapData;
 
+    private final ArrayList<Anchor> anchors = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -124,14 +133,21 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         // Set up tap listener.
         tapHelper = new TapHelper(this);
 
-        Menu optionsMenu = optionsToolbar.getMenu();
+        optionsMenu = optionsToolbar.getMenu();
         optionsMenu.findItem(R.id.toggle_record).setIcon(recordOn ? R.drawable.ic_stop : R.drawable.ic_record);
 
         optionsToolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.toggle_record) {
+                //Posso avviare la registrazione se ho archiviazione disponibile
                 if(!isExternalStorageAvailable() || isExternalStorageReadOnly()){
                     recordOn = false;
                 }
+
+                //Posso avviare la registrazione solo se ho dei piani su cui agganciare ancore.
+                if(!hasTrackingPlane()){
+                    recordOn = false;
+                }
+
                 else{
                     if(recordOn){
                         recordOn = false;
@@ -351,16 +367,15 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 String trackingFailureReasonString = TrackingStateHelper.getTrackingFailureReasonString(camera);
                 if(!trackingFailureReasonString.isEmpty())
                     runOnUiThread(()->showLoadingMessage(trackingFailureReasonString, Snackbar.LENGTH_LONG));
+
+                //Devo interrompere la registrazione
+                if(recordOn){
+                    recordOn = false;
+                    optionsMenu.findItem(R.id.toggle_record).setIcon(recordOn ? R.drawable.ic_stop : R.drawable.ic_record);
+                }
+
                 return;
             }
-
-            //Qui inizia il disegno 3D.
-
-            // Compute lighting from average intensity of the image.
-            // The first three components are color scaling factors.
-            // The last one is the average pixel intensity in gamma space.
-            final float[] colorCorrectionRgba = new float[4];
-            frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
             // No tracking error at this point. If we detected any plane, then hide the
             // message UI, otherwise show searchingPlane message.
@@ -370,9 +385,55 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 runOnUiThread(this::hideLoadingMessage);
             }
 
+            //Qui salvo il frame in modo più veloce possibile:
+            //Salvo i dati direttamente in raw.
+            //Utilizzo di PBO.
+
+
+
         } catch (Throwable t) {
             // Avoid crashing the application due to unhandled exceptions.
             Log.e(TAG, "Exception on the OpenGL thread", t);
+        }
+    }
+
+
+    // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
+    private void handleTap(Frame frame, Camera camera) {
+        MotionEvent tap = tapHelper.poll();
+
+        if (tap != null) {
+            if (camera.getTrackingState() == TrackingState.TRACKING) {
+                for (HitResult hit : frame.hitTest(tap)) {
+
+                    // Check if any plane was hit, and if it was hit inside the plane polygon
+                    Trackable trackable = hit.getTrackable();
+                    // Creates an anchor if a plane or an oriented point was hit.
+
+                    if ((trackable instanceof Plane
+                            && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
+                            && (calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
+                            || (trackable instanceof Point
+                            && ((Point) trackable).getOrientationMode()
+                            == Point.OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
+
+                        // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
+                        // Cap the number of objects created. This avoids overloading both the
+                        // rendering system and ARCore.
+                        if (anchors.size() >= 20) {
+                            anchors.get(0).detach();
+                            anchors.remove(0);
+                        }
+
+                        // Assign a color to the object for rendering.
+                        Anchor anchor = hit.createAnchor();
+
+                        anchors.add(anchor);
+
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -380,13 +441,32 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
      * Checks if we detected at least one plane.
      */
     private boolean hasTrackingPlane() {
-        for (Plane plane : session.getAllTrackables(Plane.class)) {
-            if (plane.getTrackingState() == TrackingState.TRACKING) {
-                return true;
+        if(session != null){
+            for (Plane plane : session.getAllTrackables(Plane.class)) {
+                if (plane.getTrackingState() == TrackingState.TRACKING) {
+                    return true;
+                }
             }
         }
+
         return false;
     }
+
+    // Calculate the normal distance to plane from cameraPose, the given planePose should have y axis
+    // parallel to plane's normal, for example plane's center pose or hit test pose.
+    public static float calculateDistanceToPlane(Pose planePose, Pose cameraPose) {
+        float[] normal = new float[3];
+        float cameraX = cameraPose.tx();
+        float cameraY = cameraPose.ty();
+        float cameraZ = cameraPose.tz();
+        // Get transformed Y axis of plane's coordinate system.
+        planePose.getTransformedAxis(1, 1.0f, normal, 0);
+        // Compute dot product of plane's normal with vector from camera to plane center.
+        return (cameraX - planePose.tx()) * normal[0]
+                + (cameraY - planePose.ty()) * normal[1]
+                + (cameraZ - planePose.tz()) * normal[2];
+    }
+
 
     //https://github.com/FilippoAleotti/mobilePydnet/
     protected synchronized void runInBackground(final Runnable r) {
