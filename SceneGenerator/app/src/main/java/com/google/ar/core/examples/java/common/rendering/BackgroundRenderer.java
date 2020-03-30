@@ -17,6 +17,7 @@ package com.google.ar.core.examples.java.common.rendering;
 import android.content.Context;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -79,10 +80,37 @@ public class BackgroundRenderer {
     //Riferimento alle coordinate delle texture.
     private int backgroundTexCoordAttribute;
 
-    private int[] textures = new int[1];
+    private int[] textures = new int[2];
 
     public int getBackgroundTextureId() {
         return textures[0];
+    }
+
+    public int getScreenshotFrameBufferTextureId(){
+        return textures[1];
+    }
+
+    private int[] frameBuffers = new int[1];
+
+    private int getScreenshotFrameBuffer(){
+        return frameBuffers[0];
+    }
+
+    public void onSurfaceChanged(int surfaceWidth, int surfaceHeight){
+        //Devo aggiornare anche la texture associata al framebuffer
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+
+        int textureTarget = GLES20.GL_TEXTURE_2D;
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(textureTarget, getScreenshotFrameBufferTextureId());
+
+        GLES20.glTexImage2D(textureTarget, 0, GLES20.GL_RGBA, surfaceWidth, surfaceHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+
+        ShaderUtil.checkGLError(TAG, "Framebuffer texture allocate");
+
+        GLES20.glBindTexture(textureTarget, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
     }
 
     /**
@@ -107,6 +135,31 @@ public class BackgroundRenderer {
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
+
+        //Creazione del framebuffer per il rendering alternativo alla finestra.
+        //Ho bisogno anche di una texture aggiuntiva dove salvare il rendering
+        GLES20.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getScreenshotFrameBufferTextureId());
+
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, getScreenshotFrameBufferTextureId(), 0);
+
+        if (GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER) == GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            Log.d(TAG, "Framebuffer caricato correttamente");
+        }
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+
+        ShaderUtil.checkGLError(TAG, "Framebuffer loading");
 
         int numVertices = 4;
 
@@ -217,6 +270,13 @@ public class BackgroundRenderer {
         GLES20.glEnableVertexAttribArray(backgroundPositionAttribute);
         GLES20.glEnableVertexAttribArray(backgroundTexCoordAttribute);
 
+        //Disegno nel framebuffer
+        //https://stackoverflow.com/questions/4041682/android-opengl-es-framebuffer-objects-rendering-depth-buffer-to-texture
+        //https://github.com/google-ar/sceneform-android-sdk/issues/225
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
+
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
 
         // Disable vertex arrays

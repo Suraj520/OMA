@@ -1040,7 +1040,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
      * Call from the GLThread to save a picture of the current frame.
      */
     public void savePicture() {
-        final File outPicture = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + imagesPathString), fileNameCounter + ".png");
+        final File outPicture = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + imagesPathString), fileNameCounter + ".jpg");
 
         // Make sure the directory exists
         File parentFile = outPicture.getParentFile();

@@ -222,9 +222,9 @@ public class ScreenshotRenderer {
         GLES30.glUseProgram(program);
 
         //Binding delle texture
-        GLES30.glUniform1i(textureUniform, 1);
+        GLES30.glUniform1i(textureUniform, 0);
 
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE1);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getSourceTextureId());
 
         // Set the vertex positions.
@@ -251,9 +251,6 @@ public class ScreenshotRenderer {
         GLES30.glDisableVertexAttribArray(texCoordAttribute);
 
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
-
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE1);
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
 
         // Restore the depth state for further drawing.

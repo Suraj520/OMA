@@ -22,18 +22,6 @@
         android:theme="@style/AppTheme"
         tools:ignore="GoogleAppIndexingWarning">
 
-<!--        <activity-->
-<!--            android:name="com.google.ar.sceneform.samples.solarsystem.SolarActivity"-->
-<!--            android:label="@string/app_name"-->
-<!--            android:configChanges="orientation|screenSize"-->
-<!--            android:theme="@style/Theme.AppCompat.NoActionBar"-->
-<!--            android:exported="true">-->
-<!--            <intent-filter>-->
-<!--                <action android:name="android.intent.action.MAIN" />-->
-<!--                <category android:name="android.intent.category.LAUNCHER" />-->
-<!--            </intent-filter>-->
-<!--        </activity>-->
-
         <activity android:name=".ARPydnet"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.NoActionBar"

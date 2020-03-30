@@ -12,14 +12,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#extension GL_OES_EGL_image_external : require
 
-precision mediump float;
-
-varying vec2 v_backgroundTextCoord;
-uniform samplerExternalOES u_backgroundTexture;
+precision highp float;
 
 void main() {
-    vec4 backgroundTextureColor = texture2D(u_backgroundTexture, v_backgroundTextCoord);
-    gl_FragColor = backgroundTextureColor;
+    gl_FragColor = vec4(0.9, 0.1, 0.05, 1.0);
 }

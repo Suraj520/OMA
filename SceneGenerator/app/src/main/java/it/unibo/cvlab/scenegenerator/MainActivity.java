@@ -1,9 +1,5 @@
 package it.unibo.cvlab.scenegenerator;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-
 import android.graphics.Bitmap;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
@@ -11,11 +7,14 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 
 import com.google.android.material.snackbar.Snackbar;
 import com.google.ar.core.Anchor;
@@ -26,11 +25,19 @@ import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
 import com.google.ar.core.Point;
-import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
+import com.google.ar.core.examples.java.common.helpers.CameraPermissionHelper;
+import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
+import com.google.ar.core.examples.java.common.helpers.FullScreenHelper;
+import com.google.ar.core.examples.java.common.helpers.TapHelper;
+import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
+import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
+import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
+import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
+import com.google.ar.core.examples.java.common.rendering.ShaderUtil;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
@@ -39,16 +46,12 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 import com.google.gson.Gson;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.Unbinder;
-
-import com.google.ar.core.examples.java.common.helpers.*;
-import com.google.ar.core.examples.java.common.rendering.*;
-
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -56,6 +59,10 @@ import java.util.Locale;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import it.unibo.cvlab.scenegenerator.save.SceneDataset;
 
 public class MainActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
 
@@ -69,6 +76,8 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     private static final float NEAR_PLANE  = 0.1f;
     private static final float FAR_PLANE  = 10.0f;
+
+    private static final Size SCREENSHOT_SIZE = new Size(576, 1024);
 
     @BindView(R.id.surfaceView)
     GLSurfaceView mySurfaceView;
@@ -91,10 +100,15 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     //Usati per il rendering degli oggetti virtuali:
     //Usano direttamente opengl
     private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
+    private final PlaneRenderer planeRenderer = new PlaneRenderer();
+    private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
+    private final ObjectRenderer objectRenderer = new ObjectRenderer();
 
     private boolean recordOn = false;
 
     private int surfaceWidth, surfaceHeight;
+
+    private Bitmap bmp = Bitmap.createBitmap(SCREENSHOT_SIZE.width, SCREENSHOT_SIZE.height, Bitmap.Config.ARGB_8888);
 
     private String datasetPathString;
     private String imagesPathString;
@@ -104,26 +118,23 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     private int fileNameCounter;
 
-    private boolean savingFrame = false;
-
     //Usato per far girare il salvataggio dell'immagine in un altro thread.
     private Handler handler;
     private HandlerThread handlerThread;
 
-    // Keep track of the last point cloud rendered to avoid updating the VBO if point cloud
-    // was not changed.  Do this using the timestamp since we can't compare PointCloud objects.
-    private long lastTimestamp = 0;
+    private long frameCounter = 0L;
 
-    private int[] pixelData;
-    private IntBuffer pixelDataBuffer;
-    private int[] bitmapData;
-
-    private final ArrayList<Anchor> anchors = new ArrayList<>();
+    private final float[] anchorMatrix = new float[16];
+    private final ArrayList<CustomAnchor> anchors = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        datasetPathString = getString(datasetPath);
+        imagesPathString = getString(imagesPath);
+        posesPathString = getString(posesPath);
 
         //Binding tra XML e Java tramite ButterKnife
         ButterKnife.bind(this);
@@ -157,6 +168,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                         datasetIdentifier = sdf.format(new Date());
                         //Resetto il contatore.
                         fileNameCounter = 0;
+                        frameCounter = 0;
                         recordOn = true;
                     }
                 }
@@ -168,6 +180,17 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
             return false;
         });
+
+        mySurfaceView.setOnTouchListener(tapHelper);
+
+        // Set up renderer.
+        mySurfaceView.setPreserveEGLContextOnPause(true);
+        //Provo un contesto 3.0, che mi serve per il caricamento della maschera di float.
+        mySurfaceView.setEGLContextClientVersion(3);
+        mySurfaceView.setEGLConfigChooser(8, 8, 8, 8, 16, 8); // Alpha used for plane blending.
+        mySurfaceView.setRenderer(this);
+        mySurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+        mySurfaceView.setWillNotDraw(false);
 
         installRequested = false;
     }
@@ -235,6 +258,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             return;
         }
 
+        mySurfaceView.onResume();
         displayRotationHelper.onResume();
     }
 
@@ -255,6 +279,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             // to query the session. If Session is paused before GLSurfaceView, GLSurfaceView may
             // still call session.update() and get a SessionPausedException.
             displayRotationHelper.onPause();
+            mySurfaceView.onPause();
             session.pause();
         }
     }
@@ -272,6 +297,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         }
 
         super.onPause();
+        onSessionPause();
     }
 
     @Override
@@ -301,6 +327,9 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         try {
             // Create the texture and pass it to ARCore session to be filled during update().
             backgroundRenderer.createOnGlThread(this);
+            planeRenderer.createOnGlThread(this, "models/trigrid.png");
+            screenshotRenderer.createOnGlThread(this, SCREENSHOT_SIZE);
+            objectRenderer.createOnGlThread(this, "models/cerchio.obj");
 
             ShaderUtil.checkGLError(TAG, "OnSurfaceCreated");
         } catch (IOException e) {
@@ -312,10 +341,13 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         surfaceWidth = width;
         surfaceHeight = height;
-        pixelData = new int[surfaceWidth * surfaceHeight];
-        pixelDataBuffer = IntBuffer.wrap(pixelData);
-        bitmapData = new int[surfaceWidth * surfaceHeight];
-        displayRotationHelper.onSurfaceChanged(width, height);
+        displayRotationHelper.onSurfaceChanged(surfaceWidth, surfaceHeight);
+        backgroundRenderer.onSurfaceChanged(surfaceWidth, surfaceHeight);
+        screenshotRenderer.onSurfaceChanged(surfaceWidth, surfaceHeight);
+
+        //Lo faccio qui dove il background renderer ha già istanziato la texture necessaria all'altro programma.
+        screenshotRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
+
         GLES20.glViewport(0, 0, width, height);
     }
 
@@ -329,14 +361,14 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             return;
         }
 
+        frameCounter++;
+
         Frame frame;
 
         try {
             // Notify ARCore session that the view size changed so that the perspective matrix and
             // the video background can be properly adjusted.
             displayRotationHelper.updateSessionIfNeeded(session);
-
-            int displayRotation = displayRotationHelper.getDisplayRotation();
 
             //IMPORTANTE: fa il binding tra la texutre che andrà in background e la camera.
             session.setCameraTextureName(backgroundRenderer.getBackgroundTextureId());
@@ -345,9 +377,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
             // camera framerate.
             frame = session.update();
-
             Camera camera = frame.getCamera();
-            Pose cameraPose = camera.getDisplayOrientedPose();
 
             // Get projection matrix.
             //La matrice viene generata in column-major come richiesto da openGL.
@@ -358,6 +388,13 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             //La matrice viene generata in column-major come richiesto da openGL.
             float[] viewmtx = new float[16];
             camera.getViewMatrix(viewmtx, 0);
+
+            // Handle one tap per frame.
+            handleTap(frame, camera);
+
+            //Disegno background
+            backgroundRenderer.draw(frame);
+            screenshotRenderer.drawOnPBO();
 
             // Keep the screen unlocked while tracking, but allow it to lock when tracking stops.
             trackingStateHelper.updateKeepScreenOnFlag(camera.getTrackingState());
@@ -385,21 +422,47 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 runOnUiThread(this::hideLoadingMessage);
             }
 
-            //Qui salvo il frame in modo più veloce possibile:
-            //Salvo i dati direttamente in raw.
-            //Utilizzo di PBO.
+            //Disegno altra roba
+            planeRenderer.drawPlanes(
+                    session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
 
+            // Visualize anchors created by touch.
+            for (CustomAnchor customAnchor : anchors) {
+                final Anchor anchor = customAnchor.getAnchor();
 
+                if (anchor.getTrackingState() != TrackingState.TRACKING) {
+                    continue;
+                }
 
+                //Modifico la anchorMatrix in modo che l'oggetto si muova.
+                customAnchor.update();
+                customAnchor.toMatrix(anchorMatrix, 0);
+
+                objectRenderer.updateModelMatrix(anchorMatrix);
+                objectRenderer.draw(viewmtx, projmtx);
+            }
+
+            //Salvataggio del frame
+            if(recordOn){
+                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, anchors, frameCounter, System.currentTimeMillis(), surfaceWidth, surfaceHeight, NEAR_PLANE, FAR_PLANE);
+                final ByteBuffer data = screenshotRenderer.getData().duplicate();
+                runInBackground(()->{
+                    saveDataset(dataset);
+                    savePicture(data);
+                    fileNameCounter++;
+                });
+            }
         } catch (Throwable t) {
             // Avoid crashing the application due to unhandled exceptions.
             Log.e(TAG, "Exception on the OpenGL thread", t);
         }
     }
 
-
     // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
     private void handleTap(Frame frame, Camera camera) {
+        //Continuo solo se non sto registrando
+        if(recordOn) return;
+
         MotionEvent tap = tapHelper.poll();
 
         if (tap != null) {
@@ -421,14 +484,14 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                         // Cap the number of objects created. This avoids overloading both the
                         // rendering system and ARCore.
                         if (anchors.size() >= 20) {
-                            anchors.get(0).detach();
+                            anchors.get(0).getAnchor().detach();
                             anchors.remove(0);
                         }
 
                         // Assign a color to the object for rendering.
                         Anchor anchor = hit.createAnchor();
 
-                        anchors.add(anchor);
+                        anchors.add(new CustomAnchor(anchor, trackable));
 
                         break;
                     }
@@ -485,6 +548,67 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private static boolean isExternalStorageAvailable() {
         String extStorageState = Environment.getExternalStorageState();
         return Environment.MEDIA_MOUNTED.equals(extStorageState);
+    }
+
+
+    //https://stackoverflow.com/questions/48191513/how-to-take-picture-with-camera-using-arcore
+    /**
+     * Call from the GLThread to save a picture of the current frame.
+     */
+    public void savePicture(final ByteBuffer image) {
+        final File outPicture = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + imagesPathString), fileNameCounter + ".jpg");
+
+        // Make sure the directory exists
+        File parentFile = outPicture.getParentFile();
+
+        if(parentFile != null){
+            if (!parentFile.exists()) {
+                if (!parentFile.mkdirs()) {
+                    Log.e(TAG, "Errore creazione cartella immagini");
+                    return;
+                }
+            }
+        }else{
+            Log.e(TAG, "Errore ricerca cartella immagini");
+            return;
+        }
+
+        bmp.copyPixelsFromBuffer(image);
+
+        // Write it to disk.
+        try (FileOutputStream fos = new FileOutputStream(outPicture)){
+            bmp.compress(Bitmap.CompressFormat.JPEG, 80, fos);
+            fos.flush();
+        } catch (IOException e) {
+            Log.e(TAG, "Errore salvataggio immagine", e);
+        }
+    }
+
+    public void saveDataset(final SceneDataset dataset){
+        final File outDataset = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + posesPathString) , fileNameCounter + ".json");
+
+        File parentFile = outDataset.getParentFile();
+
+        if(parentFile != null){
+            if (!parentFile.exists()) {
+                if (!parentFile.mkdirs()) {
+                    Log.e(TAG, "Errore creazione cartella dataset");
+                    return;
+                }
+            }
+        }else{
+            Log.e(TAG, "Errore ricerca cartella dataset");
+            return;
+        }
+
+        // Write it to disk.
+        try (OutputStreamWriter outputStream = new OutputStreamWriter(new FileOutputStream(outDataset), StandardCharsets.UTF_8)) {
+            String datasetString = GSON.toJson(dataset);
+            outputStream.write(datasetString);
+            outputStream.flush();
+        }catch (IOException ex){
+            Log.e(TAG, "Errore salvataggio dataset", ex);
+        }
     }
 
     private void showLoadingMessage(int resID, int length) {

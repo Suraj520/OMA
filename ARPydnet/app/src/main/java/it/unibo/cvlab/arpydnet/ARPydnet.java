@@ -544,6 +544,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         }
 
         super.onPause();
+        onSessionPause();
     }
 
     @Override

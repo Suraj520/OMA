@@ -9,8 +9,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <!-- Indicates that app requires ARCore ("AR Required"). Ensures the app is
-     visible only in the Google Play Store on devices that support ARCore.
-     For "AR Optional" apps remove this line. -->
+         visible only in the Google Play Store on devices that support ARCore.
+         For "AR Optional" apps remove this line. -->
     <uses-feature android:name="android.hardware.camera.ar" />
 
     <!-- Sceneform requires OpenGL ES 3.0 or later. -->
