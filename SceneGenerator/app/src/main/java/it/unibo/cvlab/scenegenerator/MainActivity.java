@@ -72,7 +72,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     private static final int datasetPath = R.string.dataset_path;
     private static final int imagesPath = R.string.images_path;
-    private static final int posesPath = R.string.poses_path;
+    private static final int scenesPath = R.string.scenes_path;
 
     private static final float NEAR_PLANE  = 0.1f;
     private static final float FAR_PLANE  = 10.0f;
@@ -112,7 +112,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     private String datasetPathString;
     private String imagesPathString;
-    private String posesPathString;
+    private String scenesPathString;
 
     private String datasetIdentifier;
 
@@ -134,7 +134,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
         datasetPathString = getString(datasetPath);
         imagesPathString = getString(imagesPath);
-        posesPathString = getString(posesPath);
+        scenesPathString = getString(scenesPath);
 
         //Binding tra XML e Java tramite ButterKnife
         ButterKnife.bind(this);
@@ -444,10 +444,12 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
             //Salvataggio del frame
             if(recordOn){
-                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, anchors, frameCounter, System.currentTimeMillis(), surfaceWidth, surfaceHeight, NEAR_PLANE, FAR_PLANE);
-                final ByteBuffer data = screenshotRenderer.getData().duplicate();
+                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, anchors, frameCounter, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
+                dataset.setDisplayRotation(displayRotationHelper.getDisplayRotation());
+
+                final ByteBuffer data = screenshotRenderer.getByteBufferScreenshot().duplicate();
                 runInBackground(()->{
-                    saveDataset(dataset);
+                    saveScene(dataset);
                     savePicture(data);
                     fileNameCounter++;
                 });
@@ -584,8 +586,8 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         }
     }
 
-    public void saveDataset(final SceneDataset dataset){
-        final File outDataset = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + posesPathString) , fileNameCounter + ".json");
+    public void saveScene(final SceneDataset dataset){
+        final File outDataset = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + scenesPathString) , fileNameCounter + ".json");
 
         File parentFile = outDataset.getParentFile();
 

@@ -1,22 +1,20 @@
-package it.unibo.cvlab.scenegenerator;
+package it.unibo.cvlab.computescene.rendering;
 
-import android.content.Context;
-import android.opengl.GLES30;
-import android.util.Log;
-
-import com.google.ar.core.examples.java.common.rendering.ShaderUtil;
+import org.lwjgl.opengles.GLES30;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ScreenshotRenderer {
-
     private static final String TAG = ScreenshotRenderer.class.getSimpleName();
+    private final static Logger Log = Logger.getLogger(ScreenshotRenderer.class.getSimpleName());
 
-    private static final String VERTEX_SHADER_NAME = "shaders/screenshot.vert";
-    private static final String FRAGMENT_SHADER_NAME = "shaders/screenshot.frag";
+    private static final String VERTEX_SHADER_NAME = "screenshot.vert";
+    private static final String FRAGMENT_SHADER_NAME = "screenshot.frag";
 
     private static final int COORDS_PER_VERTEX = 2;
     private static final int TEXCOORDS_PER_VERTEX = 2;
@@ -67,8 +65,12 @@ public class ScreenshotRenderer {
 
     private int[] frameBuffers = new int[1];
 
-    private int getScreenshotFrameBuffer(){
+    public int getScreenshotFrameBuffer(){
         return frameBuffers[0];
+    }
+
+    public int getDefaultFrameBuffer(){
+        return 0;
     }
 
     private int[] renderBuffers = new int[1];
@@ -83,20 +85,16 @@ public class ScreenshotRenderer {
     private byte[] pixelData;
     private ByteBuffer pixelDataBuffer;
 
-    public void onSurfaceChanged(int width, int height){
-        surfaceWidth = width;
-        surfaceHeight = height;
-    }
-
     /**
      * Allocates and initializes OpenGL resources needed by the screenshot renderer. Must be called on
      * the OpenGL thread.
      *
-     * @param context Needed to access shader source.
      */
-    public void createOnGlThread(Context context, Size screenshotSize) throws IOException {
-        this.scaledWidth = screenshotSize.width;
-        this.scaledHeight = screenshotSize.height;
+    public void createOnGlThread(int surfaceWidth, int surfaceHeight, int scaledWidth, int scaledHeight) throws IOException {
+        this.surfaceWidth = surfaceWidth;
+        this.surfaceHeight = surfaceHeight;
+        this.scaledWidth = scaledWidth;
+        this.scaledHeight = scaledHeight;
 
         int bufferLength = scaledWidth * scaledHeight * 4;
 
@@ -105,7 +103,7 @@ public class ScreenshotRenderer {
         pixelDataBuffer.order(ByteOrder.nativeOrder());
 
         //Genero il renderbuffer dove salvare lo screenshot.
-        GLES30.glGenRenderbuffers(renderBuffers.length, renderBuffers, 0);
+        GLES30.glGenRenderbuffers(renderBuffers);
 
         GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
         GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_RGBA8, scaledWidth, scaledHeight);
@@ -115,14 +113,14 @@ public class ScreenshotRenderer {
 
         //Creazione del framebuffer per il rendering alternativo alla finestra.
         //Ho bisogno anche di un renderbuffer aggiuntivo dove salvare il rendering
-        GLES30.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
+        GLES30.glGenFramebuffers(frameBuffers);
 
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
         GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
 
         //Check sullo stato del framebuffer
         if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
-            Log.d(TAG, "Framebuffer caricato correttamente");
+            Log.log(Level.INFO, "Framebuffer caricato correttamente");
         }else{
             throw new RuntimeException("Impossibile caricare il framebuffer");
         }
@@ -153,9 +151,9 @@ public class ScreenshotRenderer {
         screenshotTexCoordsBuffer.rewind();
 
         int vertexShader =
-                ShaderUtil.loadGLShader(TAG, context, GLES30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
+                ShaderUtil.loadGLShader(TAG, GLES30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
         int fragmentShader =
-                ShaderUtil.loadGLShader(TAG, context, GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
+                ShaderUtil.loadGLShader(TAG, GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
 
         // create empty OpenGL ES Program
         program = GLES30.glCreateProgram();
@@ -230,8 +228,9 @@ public class ScreenshotRenderer {
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererDraw");
     }
 
-    public ByteBuffer getByteBufferScreenshot(){
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+
+    public ByteBuffer getByteBufferScreenshot(int frameBufferId){
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, frameBufferId);
 
         // Read the pixels from pixel buffer.
         GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,
@@ -247,8 +246,8 @@ public class ScreenshotRenderer {
         return pixelDataBuffer;
     }
 
-    public byte[] getByteArrayScreenshot(){
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+    public byte[] getByteArrayScreenshot(int frameBufferId){
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, frameBufferId);
 
         // Read the pixels from pixel buffer.
         GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,

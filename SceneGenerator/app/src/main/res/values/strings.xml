@@ -8,6 +8,6 @@
 
     <string name="dataset_path">dataset/</string>
     <string name="images_path">/images/</string>
-    <string name="poses_path">/poses/</string>
+    <string name="scenes_path">/scenes/</string>
 
 </resources>

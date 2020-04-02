@@ -198,8 +198,6 @@ public class ObjectRenderer {
         GLES20.glVertexAttribPointer(
                 positionAttribute, COORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, verticesBaseAddress);
 
-        ShaderUtil.checkGLError(TAG, "Culo");
-
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
 
         // Set the ModelViewProjection matrix in the shader.
