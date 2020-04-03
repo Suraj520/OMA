@@ -14,7 +14,7 @@
  */
 package it.unibo.cvlab.computescene.rendering;
 
-import org.lwjgl.opengles.GLES20;
+import org.lwjgl.opengl.GL30;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class ShaderUtil {
     private final static Logger Log = Logger.getLogger(ShaderUtil.class.getSimpleName());
 
-    private static Path shadersPath = Paths.get("./shaders");
+    private static Path shadersPath = Paths.get("shaders").toAbsolutePath();
 
     public static void setShadersPath(Path shadersPath) {
         ShaderUtil.shadersPath = shadersPath;
@@ -45,18 +45,18 @@ public class ShaderUtil {
             throws IOException {
         String code = readShaderFileFromAssets(filename);
 
-        int shader = GLES20.glCreateShader(type);
-        GLES20.glShaderSource(shader, code);
-        GLES20.glCompileShader(shader);
+        int shader = GL30.glCreateShader(type);
+        GL30.glShaderSource(shader, code);
+        GL30.glCompileShader(shader);
 
         // Get the compilation status.
         final int[] compileStatus = new int[1];
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus);
+        GL30.glGetShaderiv(shader, GL30.GL_COMPILE_STATUS, compileStatus);
 
         // If the compilation failed, delete the shader.
         if (compileStatus[0] == 0) {
-            Log.log(Level.SEVERE, tag+") Error compiling shader: " + GLES20.glGetShaderInfoLog(shader));
-            GLES20.glDeleteShader(shader);
+            Log.log(Level.SEVERE, tag+") Error compiling shader: " + GL30.glGetShaderInfoLog(shader));
+            GL30.glDeleteShader(shader);
             shader = 0;
         }
 
@@ -74,14 +74,14 @@ public class ShaderUtil {
      * @throws RuntimeException If an OpenGL error is detected.
      */
     public static void checkGLError(String tag, String label) {
-        int lastError = GLES20.GL_NO_ERROR;
+        int lastError = GL30.GL_NO_ERROR;
         // Drain the queue of all errors.
         int error;
-        while ((error = GLES20.glGetError()) != GLES20.GL_NO_ERROR) {
+        while ((error = GL30.glGetError()) != GL30.GL_NO_ERROR) {
             Log.log(Level.SEVERE, label + ": glError " + error);
             lastError = error;
         }
-        if (lastError != GLES20.GL_NO_ERROR) {
+        if (lastError != GL30.GL_NO_ERROR) {
             throw new RuntimeException(label + ": glError " + lastError);
         }
     }

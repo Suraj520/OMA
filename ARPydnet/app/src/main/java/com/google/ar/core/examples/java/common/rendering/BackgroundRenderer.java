@@ -70,8 +70,6 @@ public class BackgroundRenderer {
     private FloatBuffer backgroundTexCoordsBuffer;
     private FloatBuffer plasmaTexCoordsBuffer;
 
-    private FloatBuffer plasmaBuffer;
-
     //Riferimento al programma shader
     private int program;
 
@@ -252,7 +250,6 @@ public class BackgroundRenderer {
         plasmaTexCoordsBuffer = maskTexCoordsTransformed.asFloatBuffer();
         plasmaTexCoordsBuffer.put(QUAD_TEXTURE_COORDS);
         plasmaTexCoordsBuffer.rewind();
-
 
         int vertexShader =
                 ShaderUtil.loadGLShader(TAG, context, GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);

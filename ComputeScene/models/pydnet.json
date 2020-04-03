@@ -1,0 +1,12 @@
+{
+	"name":"Pydnet",
+	"fileName":"optimized_pydnet++.pb",
+	"inputNodes":["im0"],
+	"outputNodes":["PSD/resize_images/ResizeBilinear","PSD/resize_images_2/ResizeBilinear","PSD/resize_images_1/ResizeBilinear"],
+	"defaultInputNode":"im0",
+	"defaultOutputNode":"PSD/resize_images/ResizeBilinear",
+	"inputShape":[1,448,640,3],
+	"inputType":"float32",
+	"outputShape":[1,448,640,1],
+	"outputType":"float32"
+}

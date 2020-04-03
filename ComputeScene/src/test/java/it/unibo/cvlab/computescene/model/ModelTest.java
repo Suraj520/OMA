@@ -11,7 +11,7 @@ import static org.junit.Assert.assertEquals;
 public class ModelTest {
 
     @Test
-    public void gsonSerializeTest(){
+    public void mainTest(){
         HashSet<String> inputNodes = new HashSet<>();
         inputNodes.add("im0");
 
@@ -34,6 +34,16 @@ public class ModelTest {
         String json = gson.toJson(model);
 
         assertEquals("{\"name\":\"Pydnet++\",\"fileName\":\"pydnet.pb\",\"inputNodes\":[\"im0\"],\"outputNodes\":[\"PSD/resize_images/ResizeBilinear\",\"PSD/resize_images_2/ResizeBilinear\",\"PSD/resize_images_1/ResizeBilinear\"],\"defaultInputNode\":\"im0\",\"defaultOutputNode\":\"PSD/resize_images/ResizeBilinear\",\"inputShape\":[1,448,640,3],\"inputType\":\"float32\",\"outputShape\":[1,448,640,1],\"outputType\":\"float32\"}", json);
+
+        assertEquals(model.calculateInputBufferSize(true), 448*640*3*4);
+        assertEquals(model.calculateInputBufferSize(false), 448*640*3);
+
+        assertEquals(model.calculateOutputBufferSize(true), 448*640*4);
+        assertEquals(model.calculateOutputBufferSize(false), 448*640);
+
+        assertEquals("float32", model.getInputType().toString());
+        assertEquals("float32", model.getOutputType().toString());
+
     }
 
 }

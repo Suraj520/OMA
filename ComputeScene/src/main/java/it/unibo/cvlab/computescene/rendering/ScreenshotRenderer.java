@@ -1,6 +1,6 @@
 package it.unibo.cvlab.computescene.rendering;
 
-import org.lwjgl.opengles.GLES30;
+import org.lwjgl.opengl.GL30;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -37,6 +37,53 @@ public class ScreenshotRenderer {
             };
 
     private static final int VERTEX_COUNT = QUAD_COORDS.length / COORDS_PER_VERTEX;
+
+    public enum ColorType{
+        RGBA8(GL30.GL_RGBA, GL30.GL_RGBA8, 4, 4),
+        RGB8(GL30.GL_RGB, GL30.GL_RGB8, 3, 1),
+        R8(GL30.GL_RED, GL30.GL_R8, 1, 1);
+
+        private int openglType;
+        private int openglTypeFormat;
+        private int byteSize;
+        private int pixelStoreAlignment;
+
+        ColorType(int openglType, int openglTypeFormat, int byteSize, int pixelStoreAlignment) {
+            this.openglType = openglType;
+            this.openglTypeFormat = openglTypeFormat;
+            this.byteSize = byteSize;
+            this.pixelStoreAlignment = pixelStoreAlignment;
+        }
+
+        public int getOpenglType() {
+            return openglType;
+        }
+
+        public int getOpenglTypeFormat() {
+            return openglTypeFormat;
+        }
+
+        public int getByteSize() {
+            return byteSize;
+        }
+
+        public int getPixelStoreAlignment() {
+            return pixelStoreAlignment;
+        }
+
+        public static ColorType parseByteSize(int byteSize){
+            switch (byteSize){
+                case 4:
+                    return RGBA8;
+                case 3:
+                    return RGB8;
+                case 1:
+                    return R8;
+                default:
+                    throw new IllegalArgumentException("Dimensione non supportata");
+            }
+        }
+    }
 
     private FloatBuffer screenshotCoordsBuffer;
     private FloatBuffer screenshotTexCoordsBuffer;
@@ -82,50 +129,51 @@ public class ScreenshotRenderer {
     private int surfaceWidth, surfaceHeight;
     private int scaledWidth, scaledHeight;
 
-    private byte[] pixelData;
     private ByteBuffer pixelDataBuffer;
+
+    private ColorType colorType;
 
     /**
      * Allocates and initializes OpenGL resources needed by the screenshot renderer. Must be called on
      * the OpenGL thread.
      *
      */
-    public void createOnGlThread(int surfaceWidth, int surfaceHeight, int scaledWidth, int scaledHeight) throws IOException {
+    public void createOnGlThread(ColorType colorType, int surfaceWidth, int surfaceHeight, int scaledWidth, int scaledHeight) throws IOException {
+        this.colorType = colorType;
         this.surfaceWidth = surfaceWidth;
         this.surfaceHeight = surfaceHeight;
         this.scaledWidth = scaledWidth;
         this.scaledHeight = scaledHeight;
 
-        int bufferLength = scaledWidth * scaledHeight * 4;
+        int bufferLength = scaledWidth * scaledHeight * colorType.getByteSize();
 
-        pixelData = new byte[bufferLength];
-        pixelDataBuffer = ByteBuffer.wrap(pixelData);
+        pixelDataBuffer = ByteBuffer.allocateDirect(bufferLength);
         pixelDataBuffer.order(ByteOrder.nativeOrder());
 
         //Genero il renderbuffer dove salvare lo screenshot.
-        GLES30.glGenRenderbuffers(renderBuffers);
+        GL30.glGenRenderbuffers(renderBuffers);
 
-        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
-        GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_RGBA8, scaledWidth, scaledHeight);
-        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, 0);
+        GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
+        GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, colorType.getOpenglTypeFormat(), scaledWidth, scaledHeight);
+        GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "RenderBuffer loading");
 
         //Creazione del framebuffer per il rendering alternativo alla finestra.
         //Ho bisogno anche di un renderbuffer aggiuntivo dove salvare il rendering
-        GLES30.glGenFramebuffers(frameBuffers);
+        GL30.glGenFramebuffers(frameBuffers);
 
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
-        GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+        GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
 
         //Check sullo stato del framebuffer
-        if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
+        if (GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) == GL30.GL_FRAMEBUFFER_COMPLETE) {
             Log.log(Level.INFO, "Framebuffer caricato correttamente");
         }else{
             throw new RuntimeException("Impossibile caricare il framebuffer");
         }
 
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "Framebuffer loading");
 
@@ -151,28 +199,28 @@ public class ScreenshotRenderer {
         screenshotTexCoordsBuffer.rewind();
 
         int vertexShader =
-                ShaderUtil.loadGLShader(TAG, GLES30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
+                ShaderUtil.loadGLShader(TAG, GL30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
         int fragmentShader =
-                ShaderUtil.loadGLShader(TAG, GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
+                ShaderUtil.loadGLShader(TAG, GL30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
 
         // create empty OpenGL ES Program
-        program = GLES30.glCreateProgram();
+        program = GL30.glCreateProgram();
 
         // add the vertex shader to program
-        GLES30.glAttachShader(program, vertexShader);
+        GL30.glAttachShader(program, vertexShader);
         // add the fragment shader to program
-        GLES30.glAttachShader(program, fragmentShader);
+        GL30.glAttachShader(program, fragmentShader);
         // creates OpenGL ES program executables
-        GLES30.glLinkProgram(program);
+        GL30.glLinkProgram(program);
 
         ShaderUtil.checkGLError(TAG, "Program creation");
 
-        GLES30.glUseProgram(program);
+        GL30.glUseProgram(program);
 
-        positionAttribute = GLES30.glGetAttribLocation(program, "a_position");
-        texCoordAttribute = GLES30.glGetAttribLocation(program, "a_textCoord");
+        positionAttribute = GL30.glGetAttribLocation(program, "a_position");
+        texCoordAttribute = GL30.glGetAttribLocation(program, "a_textCoord");
 
-        textureUniform = GLES30.glGetUniformLocation(program, "u_texture");
+        textureUniform = GL30.glGetUniformLocation(program, "u_texture");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
@@ -184,83 +232,68 @@ public class ScreenshotRenderer {
 
         // No need to test or write depth, the screen quad has arbitrary depth, and is expected
         // to be drawn first.
-        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
-        GLES30.glDepthMask(false);
+        GL30.glDisable(GL30.GL_DEPTH_TEST);
+        GL30.glDepthMask(false);
 
-        GLES30.glUseProgram(program);
+        GL30.glUseProgram(program);
 
         //Binding delle texture
-        GLES30.glUniform1i(textureUniform, 0);
+        GL30.glUniform1i(textureUniform, 0);
 
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getSourceTextureId());
+        GL30.glActiveTexture(GL30.GL_TEXTURE0);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getSourceTextureId());
 
         // Set the vertex positions.
-        GLES30.glVertexAttribPointer(
-                positionAttribute, COORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, screenshotCoordsBuffer);
+        GL30.glVertexAttribPointer(
+                positionAttribute, COORDS_PER_VERTEX, GL30.GL_FLOAT, false, 0, screenshotCoordsBuffer);
 
         // Set the texture coordinates.
-        GLES30.glVertexAttribPointer(
-                texCoordAttribute, TEXCOORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, screenshotTexCoordsBuffer);
+        GL30.glVertexAttribPointer(
+                texCoordAttribute, TEXCOORDS_PER_VERTEX, GL30.GL_FLOAT, false, 0, screenshotTexCoordsBuffer);
 
         // Enable vertex arrays
-        GLES30.glEnableVertexAttribArray(positionAttribute);
-        GLES30.glEnableVertexAttribArray(texCoordAttribute);
+        GL30.glEnableVertexAttribArray(positionAttribute);
+        GL30.glEnableVertexAttribArray(texCoordAttribute);
 
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
-        GLES30.glViewport(0, 0, scaledWidth, scaledHeight);
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
+        GL30.glViewport(0, 0, scaledWidth, scaledHeight);
+        GL30.glDrawArrays(GL30.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT);
 
-        GLES30.glViewport(0, 0, surfaceWidth, surfaceHeight);
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+        GL30.glViewport(0, 0, surfaceWidth, surfaceHeight);
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
 
         // Disable vertex arrays
-        GLES30.glDisableVertexAttribArray(positionAttribute);
-        GLES30.glDisableVertexAttribArray(texCoordAttribute);
+        GL30.glDisableVertexAttribArray(positionAttribute);
+        GL30.glDisableVertexAttribArray(texCoordAttribute);
 
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
+        GL30.glActiveTexture(GL30.GL_TEXTURE0);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
 
         // Restore the depth state for further drawing.
-        GLES30.glDepthMask(true);
-        GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+        GL30.glDepthMask(true);
+        GL30.glEnable(GL30.GL_DEPTH_TEST);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererDraw");
     }
 
 
     public ByteBuffer getByteBufferScreenshot(int frameBufferId){
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, frameBufferId);
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, frameBufferId);
 
         // Read the pixels from pixel buffer.
-        GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixelDataBuffer);
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
+        GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
+                colorType.getOpenglType(), GL30.GL_UNSIGNED_BYTE, pixelDataBuffer);
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
 
         //Restoring
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererRestore");
 
         return pixelDataBuffer;
-    }
-
-    public byte[] getByteArrayScreenshot(int frameBufferId){
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, frameBufferId);
-
-        // Read the pixels from pixel buffer.
-        GLES30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixelDataBuffer);
-
-        ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
-
-        //Restoring
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
-
-        ShaderUtil.checkGLError(TAG, "ScreenshotRendererRestore");
-
-        return pixelData;
     }
 
     public int getScaledWidth() {

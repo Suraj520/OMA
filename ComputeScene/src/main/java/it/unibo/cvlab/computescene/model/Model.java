@@ -12,8 +12,8 @@ import java.util.Set;
 public class Model {
 
     public enum Type{
-        uint8(1, false),
-        float32(4, true),;
+        uint8(Byte.BYTES, false),
+        float32(Float.BYTES, true),;
 
         private int byteSize;
         private boolean normalizationNeeded;
@@ -59,6 +59,7 @@ public class Model {
     @Expose
     @SerializedName("inputShape")
     private int[] inputShape;
+    private long[] inputShapeLong;
     //Tipicamente float32
     @Expose
     @SerializedName("inputType")
@@ -68,6 +69,7 @@ public class Model {
     @Expose
     @SerializedName("outputShape")
     private int[] outputShape;
+    private long[] outputShapeLong;
     //Tipicamente float32
     @Expose
     @SerializedName("outputType")
@@ -75,6 +77,10 @@ public class Model {
 
     private byte[] modelBytes;
     private Path modelsPath;
+
+    public Path getModelsPath() {
+        return modelsPath;
+    }
 
     public void setModelsPath(Path modelsPath) {
         this.modelsPath = modelsPath;
@@ -132,12 +138,36 @@ public class Model {
         return inputShape;
     }
 
+    public long[] getInputShapeLong(){
+        if(inputShapeLong == null){
+            inputShapeLong = new long[inputShape.length];
+
+            for (int i = 0; i < inputShape.length; i++) {
+                inputShapeLong[i] = inputShape[i];
+            }
+        }
+
+        return inputShapeLong;
+    }
+
     public Type getInputType() {
         return inputType;
     }
 
     public int[] getOutputShape() {
         return outputShape;
+    }
+
+    public long[] getOutputShapeLong(){
+        if(outputShapeLong == null){
+            outputShapeLong = new long[outputShape.length];
+
+            for (int i = 0; i < outputShape.length; i++) {
+                outputShapeLong[i] = outputShape[i];
+            }
+        }
+
+        return outputShapeLong;
     }
 
     public Type getOutputType() {
@@ -171,12 +201,12 @@ public class Model {
         return outputShape[3];
     }
 
-    public int calculateInputBufferSize(){
-        return inputShape[1] * inputShape[2] * inputShape[3] *  inputType.getByteSize();
+    public int calculateInputBufferSize(boolean takeCareOfInputTypeSize){
+        return inputShape[1] * inputShape[2] * inputShape[3] * (takeCareOfInputTypeSize ? inputType.getByteSize() : 1);
     }
 
-    public int calculateOutputBufferSize(){
-        return outputShape[1] * outputShape[2] * outputShape[3] *  outputType.getByteSize();
+    public int calculateOutputBufferSize(boolean takeCareOfOutputTypeSize){
+        return outputShape[1] * outputShape[2] * outputShape[3] * (takeCareOfOutputTypeSize ? outputType.getByteSize() : 1);
     }
 
     public boolean isNormalizationNeeded(){
