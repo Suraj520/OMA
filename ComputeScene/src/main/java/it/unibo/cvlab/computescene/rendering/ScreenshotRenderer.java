@@ -129,6 +129,8 @@ public class ScreenshotRenderer {
     private int surfaceWidth, surfaceHeight;
     private int scaledWidth, scaledHeight;
 
+    private float[] pixelDataFloatArray;
+    private int[] pixelDataIntArray;
     private ByteBuffer pixelDataBuffer;
 
     private ColorType colorType;
@@ -149,6 +151,9 @@ public class ScreenshotRenderer {
 
         pixelDataBuffer = ByteBuffer.allocateDirect(bufferLength);
         pixelDataBuffer.order(ByteOrder.nativeOrder());
+
+        pixelDataIntArray = new int[bufferLength];
+        pixelDataFloatArray = new float[bufferLength];
 
         //Genero il renderbuffer dove salvare lo screenshot.
         GL30.glGenRenderbuffers(renderBuffers);
@@ -276,14 +281,13 @@ public class ScreenshotRenderer {
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererDraw");
     }
 
-
     public ByteBuffer getByteBufferScreenshot(int frameBufferId){
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, frameBufferId);
 
         // Read the pixels from pixel buffer.
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
         GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                colorType.getOpenglType(), GL30.GL_UNSIGNED_BYTE, pixelDataBuffer);
+                colorType.getOpenglType(), GL30.GL_FLOAT, pixelDataBuffer);
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
@@ -294,6 +298,44 @@ public class ScreenshotRenderer {
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererRestore");
 
         return pixelDataBuffer;
+    }
+
+    public int[] getIntArrayScreenshot(int frameBufferId){
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, frameBufferId);
+
+        // Read the pixels from pixel buffer.
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
+        GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
+                colorType.getOpenglType(), GL30.GL_FLOAT, pixelDataIntArray);
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
+
+        ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
+
+        //Restoring
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+
+        ShaderUtil.checkGLError(TAG, "ScreenshotRendererRestore");
+
+        return pixelDataIntArray;
+    }
+
+    public float[] getFloatArrayScreenshot(int frameBufferId){
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, frameBufferId);
+
+        // Read the pixels from pixel buffer.
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
+        GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
+                colorType.getOpenglType(), GL30.GL_FLOAT, pixelDataFloatArray);
+        GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
+
+        ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
+
+        //Restoring
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+
+        ShaderUtil.checkGLError(TAG, "ScreenshotRendererRestore");
+
+        return pixelDataFloatArray;
     }
 
     public int getScaledWidth() {

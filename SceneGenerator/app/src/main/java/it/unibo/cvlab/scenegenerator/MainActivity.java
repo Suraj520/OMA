@@ -77,7 +77,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private static final float NEAR_PLANE  = 0.1f;
     private static final float FAR_PLANE  = 10.0f;
 
-    private static final Size SCREENSHOT_SIZE = new Size(576, 1024);
+    private static final Size SCREENSHOT_SIZE = new Size(1024, 574);
 
     @BindView(R.id.surfaceView)
     GLSurfaceView mySurfaceView;
@@ -361,8 +361,6 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             return;
         }
 
-        frameCounter++;
-
         Frame frame;
 
         try {
@@ -448,16 +446,23 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 dataset.setDisplayRotation(displayRotationHelper.getDisplayRotation());
 
                 final ByteBuffer data = screenshotRenderer.getByteBufferScreenshot().duplicate();
-                runInBackground(()->{
-                    saveScene(dataset);
-                    savePicture(data);
-                    fileNameCounter++;
-                });
+
+                if(data.limit() > 0){
+                    runInBackground(()->{
+                        if(recordOn){
+                            saveScene(dataset);
+                            savePicture(data);
+                            fileNameCounter++;
+                        }
+                    });
+                }
             }
         } catch (Throwable t) {
             // Avoid crashing the application due to unhandled exceptions.
             Log.e(TAG, "Exception on the OpenGL thread", t);
         }
+
+        frameCounter++;
     }
 
     // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.

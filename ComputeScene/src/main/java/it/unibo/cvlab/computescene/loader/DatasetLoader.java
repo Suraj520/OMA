@@ -5,9 +5,12 @@ import com.google.gson.GsonBuilder;
 import it.unibo.cvlab.computescene.dataset.SceneDataset;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.awt.image.ColorModel;
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -43,7 +46,7 @@ public class DatasetLoader {
 
         //Conta dei frame
         //https://stackoverflow.com/questions/1844688/how-to-read-all-files-in-a-folder-from-java
-        try (Stream<Path> paths = Files.walk(imagesPath)) {
+        try (Stream<Path> paths = Files.list(imagesPath)) {
             paths
                     .filter(Files::isRegularFile)
                     .forEach((path)->frames++);
@@ -94,6 +97,13 @@ public class DatasetLoader {
 
         Path imagePath = imagesPath.resolve(frameCounter+".jpg");
         image = ImageIO.read(imagePath.toFile());
+
+        BufferedImage newImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = newImage.createGraphics();
+        graphics.drawImage(image, 0,0,image.getWidth(), image.getHeight(), null);
+        graphics.dispose();
+        image = newImage;
+
         return image;
     }
 

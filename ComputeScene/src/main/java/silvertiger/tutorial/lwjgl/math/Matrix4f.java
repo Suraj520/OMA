@@ -463,10 +463,26 @@ public class Matrix4f {
         return scaling;
     }
 
-
     public float[] toArray(){
         float[] array = new float[16];
-        toBuffer(FloatBuffer.wrap(array));
+
+        array[0] = m00;
+        array[1] = m10;
+        array[2] = m20;
+        array[3] = m30;
+        array[4] = m01;
+        array[5] = m11;
+        array[6] = m21;
+        array[7] = m31;
+        array[8] = m02;
+        array[9] = m12;
+        array[10] = m22;
+        array[11] = m32;
+        array[12] = m03;
+        array[13] = m13;
+        array[14] = m23;
+        array[15] = m33;
+
         return array;
     }
 

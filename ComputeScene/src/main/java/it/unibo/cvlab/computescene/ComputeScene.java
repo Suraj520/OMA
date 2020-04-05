@@ -58,7 +58,6 @@ public class ComputeScene {
     private BufferedImage texture;
 
     private Session session;
-    private float[] floatArrayInputInferece;
     private float[] floatArrayOutputTensor;
     private ScreenshotRenderer.ColorType colorType;
 
@@ -83,9 +82,6 @@ public class ComputeScene {
 
         this.surfaceWidth = sceneDataset.getWidth();
         this.surfaceHeight = sceneDataset.getHeight();
-
-        if(model.isNormalizationNeeded())
-            floatArrayInputInferece = new float[model.calculateInputBufferSize(false)];
 
         floatArrayOutputTensor = new float[model.calculateOutputBufferSize(false)];
 
@@ -128,7 +124,8 @@ public class ComputeScene {
 
         // Configure GLFW
         GLFW.glfwDefaultWindowHints(); // optional, the current window hints are already the default
-        GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_TRUE); // the window will stay hidden after creation
+        GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_TRUE);
+        GLFW.glfwWindowHint(GLFW.GLFW_FLOATING, GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, GLFW.GLFW_FALSE); // the window will be not resizable
 
         // Create the window
@@ -163,8 +160,8 @@ public class ComputeScene {
 
         // Make the OpenGL context current
         GLFW.glfwMakeContextCurrent(window);
-        // Enable v-sync
-        GLFW.glfwSwapInterval(GLFW.GLFW_TRUE);
+        // Disable v-sync
+        GLFW.glfwSwapInterval(GLFW.GLFW_FALSE);
 
         // Make the window visible
         GLFW.glfwShowWindow(window);
@@ -206,7 +203,6 @@ public class ComputeScene {
             // Poll for window events. The key callback above will only be
             // invoked during this call.
             GLFW.glfwPollEvents();
-
         }
     }
 
@@ -228,68 +224,79 @@ public class ComputeScene {
     private void draw(BufferedImage image, SceneDataset sceneDataset) throws IOException {
         System.out.println("Frame corrente:"+sceneDataset.getFrameNumber());
 
+        //Binding dell'inference renderer
+        inferenceRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
+
         //Imposto l'immagine di sfondo
         backgroundRenderer.loadBackgroudImage(image);
 
         //Disegno lo sfondo.
         backgroundRenderer.draw();
 
-        //Creo uno screenshot per la rete neurale.
-        inferenceRenderer.drawOnPBO();
-        ByteBuffer byteBufferInferenceInput = inferenceRenderer.getByteBufferScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
+//        //Creo uno screenshot per la rete neurale.
+//        inferenceRenderer.drawOnPBO();
+//
+//        Tensor<?> inputTensor;
+//
+//        //Normalizzo se necessario
+//        if(model.isNormalizationNeeded()){
+//            float[] floatArrayScreenshot = inferenceRenderer.getFloatArrayScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
+//            inputTensor = Tensor.create(model.getInputShapeLong(), FloatBuffer.wrap(floatArrayScreenshot));
+//        }else{
+//            ByteBuffer byteBufferScreenshot = inferenceRenderer.getByteBufferScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
+//            inputTensor = Tensor.create(Byte.class, model.getInputShapeLong(), byteBufferScreenshot);
+//        }
+//
+//        Session.Runner runner = session.runner();
+//        runner = runner.feed(model.getDefaultInputNode(), inputTensor);
+//        runner = runner.fetch(model.getDefaultOutputNode());
+//        List<Tensor<?>> run = runner.run();
+//        Tensor<?> outputTensor = run.get(0);
+//        FloatBuffer floatBuffer = FloatBuffer.wrap(floatArrayOutputTensor);
+//        outputTensor.writeTo(floatBuffer);
+//        inputTensor.close();
+//        outputTensor.close();
+//
+//        //Salvo il depth
+//        BufferedImage colorMap = colorMapper.getColorMap(floatBuffer, 4);
+//        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
+//        ImageIO.write(colorMap, "jpg", outputStreamDepth);
+//        outputStreamDepth.close();
 
-        Tensor<?> inputTensor;
+//        objectRenderer.loadInference(floatBuffer, model.getOutputWidth(), model.getOutputHeight());
 
-        //Normalizzo se necessario
-        if(model.isNormalizationNeeded()){
-            for (int i = 0; byteBufferInferenceInput.hasRemaining(); i++) {
-                byte tmp = byteBufferInferenceInput.get();
-                floatArrayInputInferece[i] = (tmp & 0xFF) / 255.0f;
-            }
-
-            inputTensor = Tensor.create(model.getInputShapeLong(), FloatBuffer.wrap(floatArrayInputInferece));
-        }else{
-            inputTensor = Tensor.create(Byte.class, model.getInputShapeLong(), byteBufferInferenceInput);
-        }
-
-        Session.Runner runner = session.runner();
-        runner = runner.feed(model.getDefaultInputNode(), inputTensor);
-        runner = runner.fetch(model.getDefaultOutputNode());
-        List<Tensor<?>> run = runner.run();
-        Tensor<?> outputTensor = run.get(0);
-        FloatBuffer floatBuffer = FloatBuffer.wrap(floatArrayOutputTensor);
-        outputTensor.writeTo(floatBuffer);
-        inputTensor.close();
-        outputTensor.close();
-
-        //Salvo il depth
-        BufferedImage colorMap = colorMapper.getColorMap(floatBuffer, 4);
-        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-        ImageIO.write(colorMap, "jpg", outputStreamDepth);
-        outputStreamDepth.close();
-
-        objectRenderer.loadInference(floatBuffer, model.getOutputWidth(), model.getOutputHeight());
+        objectRenderer.setScaleFactor(0.1f);
+        objectRenderer.setMaskEnabled(false);
+        objectRenderer.setObjScaleFactor(1.0f);
 
         //Faccio il rendering degli oggetti.
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
         for (Pose ancora : ancore){
-            objectRenderer.updateModelMatrix(ancora.toMatrix());
-            objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            objectRenderer.updateModelMatrix(ancora.getModelMatrix());
+            objectRenderer.draw(ancora.getModelViewProjectionMatrix());
         }
 
-        //Salvo il rendering
-        screenshotRenderer.drawOnPBO();
-        ByteBuffer byteBufferScreenshot = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
-        int[] pixels = byteBufferScreenshot.asIntBuffer().array();
-
-        BufferedImage screenshot = new BufferedImage(surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_ARGB);
-        screenshot.setRGB(0,0, surfaceWidth, surfaceHeight, pixels, 0, surfaceWidth);
-
-        OutputStream outputStreamScreenshot = Files.newOutputStream(omaPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-        ImageIO.write(screenshot, "jpg", outputStreamScreenshot);
-        outputStreamScreenshot.close();
+//        //Salvo il rendering
+//        ByteBuffer byteBufferScreenshot = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
+//        int[] pixels = new int[byteBufferScreenshot.limit() / Integer.BYTES];
+//
+//        for (int i = 0; i < pixels.length; i++) {
+//            int tmp = 0;
+//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 24;
+//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 16;
+//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 8;
+//            tmp |= (byteBufferScreenshot.get() & 0xFF);
+//            pixels[i] = tmp;
+//        }
+//
+//        BufferedImage screenshot = new BufferedImage(surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_ARGB);
+//        screenshot.setRGB(0,0, surfaceWidth, surfaceHeight, pixels, 0, surfaceWidth);
+//
+//        OutputStream outputStreamScreenshot = Files.newOutputStream(omaPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
+//        ImageIO.write(screenshot, "jpg", outputStreamScreenshot);
+//        outputStreamScreenshot.close();
     }
 
     private static <T> T requestInput(T[] objs, BufferedReader inReader) throws IOException {
@@ -328,9 +335,9 @@ public class ComputeScene {
         ComputeScene computeScene;
 
         System.out.println("Inserisci il direttorio del dataset:");
-        String datasetPathString = inReader.readLine();
+        String datasetPathString = "C:\\Users\\bartn\\Desktop\\OMA\\SceneScripts\\05042020_153419";
 
-        if(datasetPathString == null) System.exit(0);
+//        if(datasetPathString == null) System.exit(0);
 
         DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
 
@@ -361,7 +368,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-        Path modelPath = requestInput(modelPaths, inReader);
+//        Path modelPath = requestInput(modelPaths, inReader);
+        Path modelPath = modelPaths[0];
 
         Model model = modelLoader.parseModel(modelPath);
         ScreenshotRenderer.ColorType colorType = ScreenshotRenderer.ColorType.parseByteSize(model.getInputDepth());
@@ -379,7 +387,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-        Path objPath = requestInput(objPaths, inReader);
+//        Path objPath = requestInput(objPaths, inReader);
+        Path objPath = objPaths[0];
         System.out.println(objPath);
         Obj obj = objectLoader.parseObj(objPath);
 
@@ -393,7 +402,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-        Path texturePath = requestInput(texturePaths, inReader);
+//        Path texturePath = requestInput(texturePaths, inReader);
+        Path texturePath = texturePaths[0];
         System.out.println(texturePath);
 
         BufferedImage texture = objectLoader.getTexutre(texturePath);

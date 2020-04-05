@@ -4,7 +4,6 @@ import de.javagl.obj.Obj;
 import de.javagl.obj.ObjData;
 import it.unibo.cvlab.computescene.dataset.Pose;
 import org.lwjgl.opengl.GL30;
-import org.lwjgl.opengl.GL30;
 import silvertiger.tutorial.lwjgl.math.Matrix4f;
 
 import java.awt.image.BufferedImage;
@@ -32,13 +31,12 @@ public class ObjectRenderer {
     private static final String FRAGMENT_SHADER_NAME = "object.frag";
 
     private static final int COORDS_PER_VERTEX = 3;
-    private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
+    private static final float[] DEFAULT_COLOR = new float[] {0.5f, 0.5f, 0.5f, 1.0f};
 
     // Object vertex buffer variables.
     private int vertexBufferId;
     private int verticesBaseAddress;
     private int texCoordsBaseAddress;
-    private int normalsBaseAddress;
     private int indexBufferId;
     private int indexCount;
 
@@ -56,12 +54,10 @@ public class ObjectRenderer {
 
     // Shader location: model view projection matrix.
     private int modelUniform;
-    private int modelViewUniform;
     private int modelViewProjectionUniform;
 
     // Shader location: object attributes.
     private int positionAttribute;
-    private int normalAttribute;
     private int texCoordAttribute;
 
     // Shader location: texture sampler.
@@ -146,11 +142,9 @@ public class ObjectRenderer {
         ShaderUtil.checkGLError(TAG, "Program creation");
 
         modelUniform = GL30.glGetUniformLocation(program, "u_model");
-        modelViewUniform = GL30.glGetUniformLocation(program, "u_modelView");
         modelViewProjectionUniform = GL30.glGetUniformLocation(program, "u_modelViewProjection");
 
         positionAttribute = GL30.glGetAttribLocation(program, "a_position");
-        normalAttribute = GL30.glGetAttribLocation(program, "a_normal");
         texCoordAttribute = GL30.glGetAttribLocation(program, "a_texCoord");
 
         textureUniform = GL30.glGetUniformLocation(program, "u_texture");
@@ -212,16 +206,17 @@ public class ObjectRenderer {
         IntBuffer wideIndices = ObjData.getFaceVertexIndices(obj, 3);
         FloatBuffer vertices = ObjData.getVertices(obj);
         FloatBuffer texCoords = ObjData.getTexCoords(obj, 2);
-        FloatBuffer normals = ObjData.getNormals(obj);
 
         // Convert int indices to shorts for GL ES 2.0 compatibility
         ShortBuffer indices =
                 ByteBuffer.allocateDirect(2 * wideIndices.limit())
                         .order(ByteOrder.nativeOrder())
                         .asShortBuffer();
+
         while (wideIndices.hasRemaining()) {
             indices.put((short) wideIndices.get());
         }
+
         indices.rewind();
 
         int[] buffers = new int[2];
@@ -232,14 +227,12 @@ public class ObjectRenderer {
         // Load vertex buffer
         verticesBaseAddress = 0;
         texCoordsBaseAddress = verticesBaseAddress + 4 * vertices.limit();
-        normalsBaseAddress = texCoordsBaseAddress + 4 * texCoords.limit();
-        final int totalBytes = normalsBaseAddress + 4 * normals.limit();
+        final int totalBytes = texCoordsBaseAddress + 4 * texCoords.limit();
 
         GL30.glBindBuffer(GL30.GL_ARRAY_BUFFER, vertexBufferId);
         GL30.glBufferData(GL30.GL_ARRAY_BUFFER, totalBytes, GL30.GL_STATIC_DRAW);
         GL30.glBufferSubData(GL30.GL_ARRAY_BUFFER, verticesBaseAddress, vertices);
         GL30.glBufferSubData(GL30.GL_ARRAY_BUFFER, texCoordsBaseAddress, texCoords);
-        GL30.glBufferSubData(GL30.GL_ARRAY_BUFFER, normalsBaseAddress, normals);
         GL30.glBindBuffer(GL30.GL_ARRAY_BUFFER, 0);
 
         // Load index buffer
@@ -294,29 +287,18 @@ public class ObjectRenderer {
     /**
      * Draws the model.
      *
-     * @param cameraView A 4x4 view matrix, in column-major order.
-     * @param cameraPerspective A 4x4 projection matrix, in column-major order.
      * @see #updateModelMatrix(float[], float)
      * @see #setMaterialProperties(float, float, float, float)
      */
-    public void draw(float[] cameraView, float[] cameraPerspective) {
-        draw(cameraView, cameraPerspective, DEFAULT_COLOR);
+    public void draw(float[] modelViewProjectionMatrix) {
+        draw(modelViewProjectionMatrix, DEFAULT_COLOR);
     }
 
     public void draw(
-            float[] cameraView,
-            float[] cameraPerspective,
+            float[] modelViewProjectionMatrix,
             float[] objColor) {
 
         ShaderUtil.checkGLError(TAG, "Before draw");
-
-        // Build the ModelView and ModelViewProjection matrices
-        // for calculating object position and light.
-        Matrix4f modelViewMatrix = new Matrix4f(cameraView);
-        modelViewMatrix.multiply(modelMatrix);
-
-        Matrix4f modelViewProjectionMatrix = new Matrix4f(cameraPerspective);
-        modelViewMatrix.multiply(modelViewMatrix);
 
         GL30.glUseProgram(program);
 
@@ -352,20 +334,16 @@ public class ObjectRenderer {
 
         GL30.glVertexAttribPointer(
                 positionAttribute, COORDS_PER_VERTEX, GL30.GL_FLOAT, false, 0, verticesBaseAddress);
-        GL30.glVertexAttribPointer(normalAttribute, 3, GL30.GL_FLOAT, false, 0, normalsBaseAddress);
-        GL30.glVertexAttribPointer(
-                texCoordAttribute, 2, GL30.GL_FLOAT, false, 0, texCoordsBaseAddress);
+        GL30.glVertexAttribPointer(texCoordAttribute, 2, GL30.GL_FLOAT, false, 0, texCoordsBaseAddress);
 
         GL30.glBindBuffer(GL30.GL_ARRAY_BUFFER, 0);
 
         // Set the ModelViewProjection matrix in the shader.
         GL30.glUniformMatrix4fv(modelUniform, false, modelMatrix.toArray());
-        GL30.glUniformMatrix4fv(modelViewUniform, false, modelViewMatrix.toArray());
-        GL30.glUniformMatrix4fv(modelViewProjectionUniform, false, modelViewProjectionMatrix.toArray());
+        GL30.glUniformMatrix4fv(modelViewProjectionUniform, false, modelViewProjectionMatrix);
 
         // Enable vertex arrays
         GL30.glEnableVertexAttribArray(positionAttribute);
-        GL30.glEnableVertexAttribArray(normalAttribute);
         GL30.glEnableVertexAttribArray(texCoordAttribute);
 
         GL30.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
@@ -375,7 +353,6 @@ public class ObjectRenderer {
 
         // Disable vertex arrays
         GL30.glDisableVertexAttribArray(positionAttribute);
-        GL30.glDisableVertexAttribArray(normalAttribute);
         GL30.glDisableVertexAttribArray(texCoordAttribute);
 
         GL30.glActiveTexture(GL30.GL_TEXTURE0);
@@ -383,10 +360,6 @@ public class ObjectRenderer {
 
         GL30.glActiveTexture(GL30.GL_TEXTURE1);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
-        GL30.glActiveTexture(GL30.GL_TEXTURE2);
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
 
         ShaderUtil.checkGLError(TAG, "After draw");
     }
@@ -436,6 +409,15 @@ public class ObjectRenderer {
         //Lo caccio così
         //Altrimenti nello shader inverto i colori.
         int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+
+//        for (int i = 0; i < rgb.length; i++) {
+//            int tmp = 0;
+//            tmp |= ((rgb[i] >> 16) & 0xFF);
+//            tmp |= ((rgb[i] >> 8) & 0xFF) << 8;
+//            tmp |= ((rgb[i]) & 0xFF) << 16;
+//            rgb[i] = tmp;
+//        }
+
         GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, image.getWidth(), image.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, rgb);
 
         GL30.glBindTexture(textureTarget, 0);

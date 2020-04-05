@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.util.logging.Logger;
 
 //https://github.com/google-ar/arcore-android-sdk/tree/master/samples/hello_ar_java/app/src/main/java/com/google/ar/core/examples/java/common/rendering
@@ -216,15 +217,6 @@ public class BackgroundRenderer {
         GL30.glDisableVertexAttribArray(backgroundTexCoordAttribute);
 
         GL30.glActiveTexture(GL30.GL_TEXTURE0);
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
-        GL30.glActiveTexture(GL30.GL_TEXTURE1);
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
-        GL30.glActiveTexture(GL30.GL_TEXTURE2);
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
-        GL30.glActiveTexture(GL30.GL_TEXTURE3);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
 
         // Restore the depth state for further drawing.

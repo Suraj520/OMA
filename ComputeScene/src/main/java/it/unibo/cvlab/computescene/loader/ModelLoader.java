@@ -33,7 +33,7 @@ public class ModelLoader {
     public ModelLoader(Path modelsPath) throws IOException {
         this.modelsPath = modelsPath;
 
-        try (Stream<Path> paths = Files.walk(modelsPath)) {
+        try (Stream<Path> paths = Files.list(modelsPath)) {
             paths
                     .filter(Files::isRegularFile)
                     .filter((path)->path.getFileName().toString().endsWith(".json"))

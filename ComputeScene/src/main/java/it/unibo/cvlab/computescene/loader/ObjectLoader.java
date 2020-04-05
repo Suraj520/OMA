@@ -34,14 +34,14 @@ public class ObjectLoader {
     public ObjectLoader(Path objsPath) throws IOException {
         this.objsPath = objsPath;
 
-        try (Stream<Path> paths = Files.walk(objsPath)) {
+        try (Stream<Path> paths = Files.list(objsPath)) {
             paths
                     .filter(Files::isRegularFile)
                     .filter((path)->path.getFileName().toString().endsWith(".obj"))
                     .forEach(objPathSet::add);
         }
 
-        try (Stream<Path> paths = Files.walk(objsPath)) {
+        try (Stream<Path> paths = Files.list(objsPath)) {
             paths
                     .filter(Files::isRegularFile)
                     .filter((path)->path.getFileName().toString().endsWith(".png") || path.getFileName().toString().endsWith(".jpg"))

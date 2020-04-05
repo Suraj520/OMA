@@ -5,20 +5,25 @@ import com.google.ar.core.Pose;
 public class MyPose {
 
     private float tx,ty,tz;
-    private float qx,qy,qz,qw;
+    private float qx;
+    private float qy;
+    private float qz;
+    private float qw;
+    private float[] modelMatrix;
+    private float[] modelViewMatrix;
+    private float[] modelViewProjectionMatrix;
 
-    public MyPose(Pose pose){
-        this(pose.tx(), pose.ty(), pose.tz(), pose.qx(), pose.qy(), pose.qz(), pose.qw());
-    }
-
-    public MyPose(float tx, float ty, float tz, float qx, float qy, float qz, float qw) {
-        this.tx = tx;
-        this.ty = ty;
-        this.tz = tz;
-        this.qx = qx;
-        this.qy = qy;
-        this.qz = qz;
-        this.qw = qw;
+    public MyPose(Pose pose, float[] modelMatrix, float[] modelViewMatrix, float[] modelViewProjectionMatrix){
+        this.tx = pose.tx();
+        this.ty = pose.ty();
+        this.tz = pose.tz();
+        this.qx = pose.qx();
+        this.qy = pose.qy();
+        this.qz = pose.qz();
+        this.qw = pose.qw();
+        this.modelMatrix = modelMatrix;
+        this.modelViewMatrix = modelViewMatrix;
+        this.modelViewProjectionMatrix = modelViewProjectionMatrix;
     }
 
     public float getTx() {
@@ -47,5 +52,17 @@ public class MyPose {
 
     public float getQw() {
         return qw;
+    }
+
+    public float[] getModelMatrix() {
+        return modelMatrix;
+    }
+
+    public float[] getModelViewMatrix() {
+        return modelViewMatrix;
+    }
+
+    public float[] getModelViewProjectionMatrix() {
+        return modelViewProjectionMatrix;
     }
 }

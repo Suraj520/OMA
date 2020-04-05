@@ -35,7 +35,6 @@ uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
 
 void main() {
-
     if(u_maskEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
         //https://community.khronos.org/t/gl-fragcoord-z-gl-fragcoord-w-for-quick-depth-calculation-camera-to-fragment/68919/2
@@ -87,5 +86,6 @@ void main() {
     // Apply SRGB gamma before writing the fragment color.
     color.rgb = pow(color, vec3(kGamma));
 
+    gl_FragColor.rgb = color;
     gl_FragColor.a = objectColor.a;
 }

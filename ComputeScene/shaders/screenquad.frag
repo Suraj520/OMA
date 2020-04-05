@@ -21,6 +21,6 @@ uniform sampler2D u_inferenceTexture;
 
 void main() {
     vec2 textureCoord = vec2(v_backgroundTextCoord.x, 1.0 - v_backgroundTextCoord.y);
-    vec4 backgroundTextureColor = texture2D(u_backgroundTexture, textureCoord);
-    gl_FragColor = backgroundTextureColor;
+    vec4 tmp = texture2D(u_backgroundTexture, textureCoord);
+    gl_FragColor = vec4(tmp.b, tmp.g, tmp.r, 1.0);
 }
