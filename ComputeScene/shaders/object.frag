@@ -24,8 +24,6 @@ uniform float u_lowerDelta;
 
 uniform vec2 u_windowSize;
 
-uniform vec4 u_materialParameters;
-
 varying vec2 v_texCoord;
 
 uniform vec4 u_objColor;
@@ -64,13 +62,10 @@ void main() {
 
     // We support approximate sRGB gamma.
     const float kGamma = 0.4545454;
-    const float kInverseGamma = 2.2;
-
-    float materialAmbient = u_materialParameters.x;
-    float materialSpecular = u_materialParameters.z;
 
     // Flip the y-texture coordinate to address the texture from top-left.
-    vec4 objectColor = texture2D(u_texture, vec2(v_texCoord.x, 1.0 - v_texCoord.y));
+    vec4 tmp = texture2D(u_texture, vec2(v_texCoord.x, 1.0 - v_texCoord.y));
+    vec4 objectColor = vec4(tmp.b, tmp.g, tmp.r, 1.0);
 
     // Apply color to grayscale image only if the alpha of u_ObjColor is
     // greater and equal to 255.0.
@@ -79,13 +74,5 @@ void main() {
       objectColor.rgb = u_objColor.rgb * intensity / 255.0;
     }
 
-    // Apply inverse SRGB gamma to the texture before making lighting calculations.
-    objectColor.rgb = pow(objectColor.rgb, vec3(kInverseGamma));
-
-    vec3 color = objectColor.rgb * materialAmbient + materialSpecular;
-    // Apply SRGB gamma before writing the fragment color.
-    color.rgb = pow(color, vec3(kGamma));
-
-    gl_FragColor.rgb = color;
-    gl_FragColor.a = objectColor.a;
+    gl_FragColor = objectColor;
 }

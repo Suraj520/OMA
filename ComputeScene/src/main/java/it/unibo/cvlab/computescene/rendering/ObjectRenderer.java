@@ -1,10 +1,10 @@
 package it.unibo.cvlab.computescene.rendering;
 
+import android.opengl.Matrix;
 import de.javagl.obj.Obj;
 import de.javagl.obj.ObjData;
 import it.unibo.cvlab.computescene.dataset.Pose;
 import org.lwjgl.opengl.GL30;
-import silvertiger.tutorial.lwjgl.math.Matrix4f;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -16,15 +16,8 @@ public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
     private final static Logger Log = Logger.getLogger(ObjectRenderer.class.getSimpleName());
 
-    public static final float MIN_LOWER_DELTA = -0.50f;
-    public static final float MAX_LOWER_DELTA = 0.50f;
-    public static final float DEFAULT_LOWER_DELTA = 0.05f;
-    public static final float STEP_LOWER_DELTA = 0.02f;
-
-    public static final float MIN_OBJ_SCALE_FACTOR = 0.10f;
-    public static final float MAX_OBJ_SCALE_FACTOR = 2.00f;
+    public static final float DEFAULT_LOWER_DELTA = 0.1f;
     public static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
-    public static final float STEP_OBJ_SCALE_FACTOR = 0.1f;
 
     // Shader names.
     private static final String VERTEX_SHADER_NAME = "object.vert";
@@ -63,20 +56,14 @@ public class ObjectRenderer {
     // Shader location: texture sampler.
     private int textureUniform;
 
-    // Shader location: material properties.
-    private int materialParametersUniform;
-
     // Shader location: object color property (to change the primary color of the object).
     private int colorUniform;
 
     // Temporary matrices allocated here to reduce number of allocations for each frame.
-    private Matrix4f modelMatrix = new Matrix4f();
+    private float[] modelMatrix = new float[16];
+    private final float[] modelViewMatrix = new float[16];
+    private final float[] modelViewProjectionMatrix = new float[16];
 
-    // Set some default material properties to use for lighting.
-    private float ambient = 0.3f;
-    private float diffuse = 1.0f;
-    private float specular = 1.0f;
-    private float specularPower = 6.0f;
 
     private boolean maskEnabled;
     private int maskEnabledUniform;
@@ -159,7 +146,6 @@ public class ObjectRenderer {
         scaleFactorUniform = GL30.glGetUniformLocation(program, "u_scaleFactor");
         cameraPoseUniform = GL30.glGetUniformLocation(program, "u_cameraPose");
 
-        materialParametersUniform = GL30.glGetUniformLocation(program, "u_materialParameters");
         colorUniform = GL30.glGetUniformLocation(program, "u_objColor");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
@@ -243,7 +229,7 @@ public class ObjectRenderer {
 
         ShaderUtil.checkGLError(TAG, "OBJ buffer load");
 
-        modelMatrix = new Matrix4f();
+        Matrix.setIdentityM(modelMatrix, 0);
     }
 
 
@@ -251,6 +237,7 @@ public class ObjectRenderer {
      * Updates the object model matrix and applies scaling.
      *
      * @param modelMatrix A 4x4 model-to-world transformation matrix, stored in column-major order.
+     * @see android.opengl.Matrix
      */
     public void updateModelMatrix(float[] modelMatrix) {
         updateModelMatrix(modelMatrix, objScaleFactor);
@@ -261,42 +248,38 @@ public class ObjectRenderer {
      *
      * @param modelMatrix A 4x4 model-to-world transformation matrix, stored in column-major order.
      * @param scaleFactor A separate scaling factor to apply before the {@code modelMatrix}.
+     * @see android.opengl.Matrix
      */
     public void updateModelMatrix(float[] modelMatrix, float scaleFactor) {
-        this.modelMatrix = new Matrix4f(modelMatrix);
-        this.modelMatrix.multiply(scaleFactor);
-    }
-
-    /**
-     * Sets the surface characteristics of the rendered model.
-     *
-     * @param ambient Intensity of non-directional surface illumination.
-     * @param diffuse Diffuse (matte) surface reflectivity.
-     * @param specular Specular (shiny) surface reflectivity.
-     * @param specularPower Surface shininess. Larger values result in a smaller, sharper specular
-     *     highlight.
-     */
-    public void setMaterialProperties(
-            float ambient, float diffuse, float specular, float specularPower) {
-        this.ambient = ambient;
-        this.diffuse = diffuse;
-        this.specular = specular;
-        this.specularPower = specularPower;
+        float[] scaleMatrix = new float[16];
+        Matrix.setIdentityM(scaleMatrix, 0);
+        scaleMatrix[0] = scaleFactor;
+        scaleMatrix[5] = scaleFactor;
+        scaleMatrix[10] = scaleFactor;
+        Matrix.multiplyMM(this.modelMatrix, 0, modelMatrix, 0, scaleMatrix, 0);
     }
 
     /**
      * Draws the model.
      *
+     * @param cameraView A 4x4 view matrix, in column-major order.
+     * @param cameraPerspective A 4x4 projection matrix, in column-major order.
      * @see #updateModelMatrix(float[], float)
-     * @see #setMaterialProperties(float, float, float, float)
+     * @see android.opengl.Matrix
      */
-    public void draw(float[] modelViewProjectionMatrix) {
-        draw(modelViewProjectionMatrix, DEFAULT_COLOR);
+    public void draw(float[] cameraView, float[] cameraPerspective) {
+        draw(cameraView, cameraPerspective, DEFAULT_COLOR);
     }
 
     public void draw(
-            float[] modelViewProjectionMatrix,
+            float[] cameraView,
+            float[] cameraPerspective,
             float[] objColor) {
+
+        // Build the ModelView and ModelViewProjection matrices
+        // for calculating object position and light.
+        Matrix.multiplyMM(modelViewMatrix, 0, cameraView, 0, modelMatrix, 0);
+        Matrix.multiplyMM(modelViewProjectionMatrix, 0, cameraPerspective, 0, modelViewMatrix, 0);
 
         ShaderUtil.checkGLError(TAG, "Before draw");
 
@@ -304,9 +287,6 @@ public class ObjectRenderer {
 
         // Set the object color property.
         GL30.glUniform4fv(colorUniform, objColor);
-
-        // Set the object material properties.
-        GL30.glUniform4f(materialParametersUniform, ambient, diffuse, specular, specularPower);
 
         GL30.glUniform1f(scaleFactorUniform, scaleFactor);
         GL30.glUniform3fv(cameraPoseUniform, cameraPose);
@@ -339,7 +319,7 @@ public class ObjectRenderer {
         GL30.glBindBuffer(GL30.GL_ARRAY_BUFFER, 0);
 
         // Set the ModelViewProjection matrix in the shader.
-        GL30.glUniformMatrix4fv(modelUniform, false, modelMatrix.toArray());
+        GL30.glUniformMatrix4fv(modelUniform, false, modelMatrix);
         GL30.glUniformMatrix4fv(modelViewProjectionUniform, false, modelViewProjectionMatrix);
 
         // Enable vertex arrays
@@ -380,14 +360,6 @@ public class ObjectRenderer {
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
     }
 
-    /**
-     * Carica l'immagine di depth. Non libera la risorsa bitmap.
-     * @param image BufferedImage con l'informazione della depth.
-     */
-    public void loadInferenceImage(BufferedImage image){
-        loadTexture(image, getInferenceTexture(), GL30.GL_TEXTURE1);
-    }
-
     public void loadTextureImage(BufferedImage image){
         loadTexture(image, getTextureId(), GL30.GL_TEXTURE0);
     }
@@ -410,18 +382,10 @@ public class ObjectRenderer {
         //Altrimenti nello shader inverto i colori.
         int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
 
-//        for (int i = 0; i < rgb.length; i++) {
-//            int tmp = 0;
-//            tmp |= ((rgb[i] >> 16) & 0xFF);
-//            tmp |= ((rgb[i] >> 8) & 0xFF) << 8;
-//            tmp |= ((rgb[i]) & 0xFF) << 16;
-//            rgb[i] = tmp;
-//        }
-
         GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, image.getWidth(), image.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, rgb);
 
         GL30.glBindTexture(textureTarget, 0);
 
-        ShaderUtil.checkGLError(TAG, "mask loading");
+        ShaderUtil.checkGLError(TAG, "texture loading");
     }
 }

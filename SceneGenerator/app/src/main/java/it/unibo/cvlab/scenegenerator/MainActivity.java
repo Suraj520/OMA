@@ -442,19 +442,19 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
             //Salvataggio del frame
             if(recordOn){
-                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, anchors, frameCounter, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
+                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, viewmtx, projmtx, anchors, frameCounter, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
                 dataset.setDisplayRotation(displayRotationHelper.getDisplayRotation());
 
                 final ByteBuffer data = screenshotRenderer.getByteBufferScreenshot().duplicate();
 
                 if(data.limit() > 0){
-                    runInBackground(()->{
+//                    runInBackground(()->{
                         if(recordOn){
                             saveScene(dataset);
                             savePicture(data);
                             fileNameCounter++;
                         }
-                    });
+//                    });
                 }
             }
         } catch (Throwable t) {

@@ -2,7 +2,6 @@ package it.unibo.cvlab.computescene.dataset;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
-import silvertiger.tutorial.lwjgl.math.Matrix4f;
 
 public class SceneDataset {
 
@@ -141,16 +140,8 @@ public class SceneDataset {
         return viewmtx;
     }
 
-    public Matrix4f getViewmtx4f(){
-        return new Matrix4f(getViewmtx());
-    }
-
     public float[] getProjmtx() {
         return projmtx;
-    }
-
-    public Matrix4f getProjmtx4f(){
-        return new Matrix4f(getProjmtx());
     }
 
     public void setDisplayRotation(int displayRotation) {

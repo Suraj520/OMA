@@ -5,25 +5,14 @@ import android.opengl.Matrix;
 import com.google.ar.core.Pose;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.Arrays;
 import java.util.List;
 
 import it.unibo.cvlab.scenegenerator.CustomAnchor;
 
 public class SceneDataset {
 
-    public static SceneDataset parseDataset(Pose sensorPose, com.google.ar.core.Camera camera, List<CustomAnchor> listaAncore, final long frameNumber, final long timestamp, final int width, final int height, final float nearPlane, final float farPlane) {
-        // Get projection matrix.
-        float[] projmtx = new float[16];
-        camera.getProjectionMatrix(projmtx, 0, nearPlane, farPlane);
-
-        // Get camera matrix and draw.
-        float[] viewmtx = new float[16];
-        camera.getViewMatrix(viewmtx, 0);
-
-        //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, projmtx, 0, viewmtx, 0);
-
+    public static SceneDataset parseDataset(Pose sensorPose, com.google.ar.core.Camera camera, float[] viewmtx, float[] projmtx, List<CustomAnchor> listaAncore, final long frameNumber, final long timestamp, final int width, final int height, final float nearPlane, final float farPlane) {
         MyPose cameraData = new MyPose(camera.getPose());
         MyPose cameraDisplayData = new MyPose(camera.getDisplayOrientedPose());
         MyPose sensorData = new MyPose(sensorPose);
@@ -32,10 +21,11 @@ public class SceneDataset {
 
         int i = 0;
         for (CustomAnchor anchor : listaAncore) {
-            myPoses[i++] = new MyPose(anchor.getAnchor().getPose());
+            Pose pose = anchor.getAnchor().getPose();
+            myPoses[i++] = new MyPose(pose);
         }
 
-        return new SceneDataset(cameraData, cameraDisplayData, sensorData, frameNumber, timestamp, width, height, myPoses.length, myPoses, nearPlane, farPlane, viewmtx, projmtx);
+        return new SceneDataset(cameraData, cameraDisplayData, sensorData, frameNumber, timestamp, width, height, myPoses.length, myPoses, nearPlane, farPlane, Arrays.copyOf(viewmtx, viewmtx.length), Arrays.copyOf(projmtx, projmtx.length));
     }
 
     //Informazioni ricavate:

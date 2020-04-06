@@ -52,6 +52,8 @@ public class ComputeScene {
     private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
     private final ScreenshotRenderer inferenceRenderer = new ScreenshotRenderer();
 
+    private final Calibrator calibrator = new Calibrator();
+
     private DatasetLoader datasetLoader;
     private Model model;
     private Obj obj;
@@ -212,7 +214,6 @@ public class ComputeScene {
         try {
             backgroundRenderer.createOnGlThread(surfaceWidth, surfaceHeight);
             objectRenderer.createOnGlThread(obj, texture);
-            objectRenderer.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
             inferenceRenderer.createOnGlThread(colorType, surfaceWidth, surfaceHeight, model.getInputWidth(), model.getInputHeight());
         } catch (IOException e) {
@@ -233,40 +234,43 @@ public class ComputeScene {
         //Disegno lo sfondo.
         backgroundRenderer.draw();
 
-//        //Creo uno screenshot per la rete neurale.
-//        inferenceRenderer.drawOnPBO();
-//
-//        Tensor<?> inputTensor;
-//
-//        //Normalizzo se necessario
-//        if(model.isNormalizationNeeded()){
-//            float[] floatArrayScreenshot = inferenceRenderer.getFloatArrayScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
-//            inputTensor = Tensor.create(model.getInputShapeLong(), FloatBuffer.wrap(floatArrayScreenshot));
-//        }else{
-//            ByteBuffer byteBufferScreenshot = inferenceRenderer.getByteBufferScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
-//            inputTensor = Tensor.create(Byte.class, model.getInputShapeLong(), byteBufferScreenshot);
-//        }
-//
-//        Session.Runner runner = session.runner();
-//        runner = runner.feed(model.getDefaultInputNode(), inputTensor);
-//        runner = runner.fetch(model.getDefaultOutputNode());
-//        List<Tensor<?>> run = runner.run();
-//        Tensor<?> outputTensor = run.get(0);
-//        FloatBuffer floatBuffer = FloatBuffer.wrap(floatArrayOutputTensor);
-//        outputTensor.writeTo(floatBuffer);
-//        inputTensor.close();
-//        outputTensor.close();
+        //Creo uno screenshot per la rete neurale.
+        inferenceRenderer.drawOnPBO();
+
+        Tensor<?> inputTensor;
+
+        //Normalizzo se necessario
+        if(model.isNormalizationNeeded()){
+            float[] floatArrayScreenshot = inferenceRenderer.getFloatArrayScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
+            inputTensor = Tensor.create(model.getInputShapeLong(), FloatBuffer.wrap(floatArrayScreenshot));
+        }else{
+            ByteBuffer byteBufferScreenshot = inferenceRenderer.getByteBufferScreenshot(inferenceRenderer.getScreenshotFrameBuffer());
+            inputTensor = Tensor.create(Byte.class, model.getInputShapeLong(), byteBufferScreenshot);
+        }
+
+        Session.Runner runner = session.runner();
+        runner = runner.feed(model.getDefaultInputNode(), inputTensor);
+        runner = runner.fetch(model.getDefaultOutputNode());
+        List<Tensor<?>> run = runner.run();
+        Tensor<?> outputTensor = run.get(0);
+        FloatBuffer inference = FloatBuffer.wrap(floatArrayOutputTensor);
+        outputTensor.writeTo(inference);
+        inputTensor.close();
+        outputTensor.close();
+
+        calibrator.setCameraPerspective(sceneDataset.getProjmtx());
+        calibrator.setCameraView(sceneDataset.getViewmtx());
+        calibrator.setDisplayRotation(90);//Devo settarla di default perchè qui lo schermo non ruota.
+
 //
 //        //Salvo il depth
-//        BufferedImage colorMap = colorMapper.getColorMap(floatBuffer, 4);
+//        BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
 //        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
 //        ImageIO.write(colorMap, "jpg", outputStreamDepth);
 //        outputStreamDepth.close();
 
-//        objectRenderer.loadInference(floatBuffer, model.getOutputWidth(), model.getOutputHeight());
-
-        objectRenderer.setScaleFactor(0.1f);
-        objectRenderer.setMaskEnabled(false);
+        objectRenderer.loadInference(inference, model.getOutputWidth(), model.getOutputHeight());
+        objectRenderer.setMaskEnabled(true);
         objectRenderer.setObjScaleFactor(1.0f);
 
         //Faccio il rendering degli oggetti.
@@ -274,8 +278,10 @@ public class ComputeScene {
         Pose[] ancore = sceneDataset.getAncore();
 
         for (Pose ancora : ancore){
+            calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), ancora, sceneDataset.getCameraPose());
+            objectRenderer.setScaleFactor(calibrator.getScaleFactor());
             objectRenderer.updateModelMatrix(ancora.getModelMatrix());
-            objectRenderer.draw(ancora.getModelViewProjectionMatrix());
+            objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
         }
 
 //        //Salvo il rendering
@@ -335,7 +341,7 @@ public class ComputeScene {
         ComputeScene computeScene;
 
         System.out.println("Inserisci il direttorio del dataset:");
-        String datasetPathString = "C:\\Users\\bartn\\Desktop\\OMA\\SceneScripts\\05042020_153419";
+        String datasetPathString = "C:\\Users\\bartn\\Desktop\\OMA\\SceneScripts\\06042020_145038";
 
 //        if(datasetPathString == null) System.exit(0);
 

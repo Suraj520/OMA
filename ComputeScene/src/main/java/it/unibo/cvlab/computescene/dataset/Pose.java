@@ -1,7 +1,6 @@
 package it.unibo.cvlab.computescene.dataset;
 
 import com.google.gson.annotations.Expose;
-import silvertiger.tutorial.lwjgl.math.Matrix4f;
 
 public class Pose {
 

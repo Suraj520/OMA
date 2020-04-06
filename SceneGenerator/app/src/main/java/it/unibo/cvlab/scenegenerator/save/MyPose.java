@@ -10,10 +10,8 @@ public class MyPose {
     private float qz;
     private float qw;
     private float[] modelMatrix;
-    private float[] modelViewMatrix;
-    private float[] modelViewProjectionMatrix;
 
-    public MyPose(Pose pose, float[] modelMatrix, float[] modelViewMatrix, float[] modelViewProjectionMatrix){
+    public MyPose(Pose pose){
         this.tx = pose.tx();
         this.ty = pose.ty();
         this.tz = pose.tz();
@@ -21,9 +19,8 @@ public class MyPose {
         this.qy = pose.qy();
         this.qz = pose.qz();
         this.qw = pose.qw();
-        this.modelMatrix = modelMatrix;
-        this.modelViewMatrix = modelViewMatrix;
-        this.modelViewProjectionMatrix = modelViewProjectionMatrix;
+        this.modelMatrix = new float[16];
+        pose.toMatrix(this.modelMatrix, 0);
     }
 
     public float getTx() {
@@ -58,11 +55,4 @@ public class MyPose {
         return modelMatrix;
     }
 
-    public float[] getModelViewMatrix() {
-        return modelViewMatrix;
-    }
-
-    public float[] getModelViewProjectionMatrix() {
-        return modelViewProjectionMatrix;
-    }
 }
