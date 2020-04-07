@@ -16,7 +16,7 @@ public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
     private final static Logger Log = Logger.getLogger(ObjectRenderer.class.getSimpleName());
 
-    public static final float DEFAULT_LOWER_DELTA = 0.1f;
+    public static final float DEFAULT_LOWER_DELTA = 0.01f;
     public static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
 
     // Shader names.
@@ -348,14 +348,11 @@ public class ObjectRenderer {
     //http://www.anandmuralidhar.com/blog/android/load-read-texture/
     //https://github.com/anandmuralidhar24/FloatTextureAndroid
     //Metodo per caricare la maschera
-    public void loadInference(FloatBuffer inference, int width, int height){
-        //Anche se in precedenza ho usato GL30, il contesto è di tipo 3.0, compatibile con i precedenti.
-        inference.rewind();
-
+    public void loadInference(float[] inferenceArray, int width, int height){
         GL30.glActiveTexture(GL30.GL_TEXTURE1);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, getInferenceTexture());
 
-        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R32F, width, height, 0, GL30.GL_RED, GL30.GL_FLOAT, inference);
+        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R32F, width, height, 0, GL30.GL_RED, GL30.GL_FLOAT, inferenceArray);
 
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
     }

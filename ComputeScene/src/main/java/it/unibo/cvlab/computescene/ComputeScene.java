@@ -60,7 +60,7 @@ public class ComputeScene {
     private BufferedImage texture;
 
     private Session session;
-    private float[] floatArrayOutputTensor;
+    private float[] inferenceArray;
     private ScreenshotRenderer.ColorType colorType;
 
     private Path depthPath;
@@ -85,7 +85,7 @@ public class ComputeScene {
         this.surfaceWidth = sceneDataset.getWidth();
         this.surfaceHeight = sceneDataset.getHeight();
 
-        floatArrayOutputTensor = new float[model.calculateOutputBufferSize(false)];
+        inferenceArray = new float[model.calculateOutputBufferSize(false)];
 
         colorMapper.prepare(model.getOutputWidth(), model.getOutputHeight());
 
@@ -222,14 +222,14 @@ public class ComputeScene {
 
     }
 
-    private void draw(BufferedImage image, SceneDataset sceneDataset) throws IOException {
+    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset) throws IOException {
         System.out.println("Frame corrente:"+sceneDataset.getFrameNumber());
 
         //Binding dell'inference renderer
         inferenceRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
 
         //Imposto l'immagine di sfondo
-        backgroundRenderer.loadBackgroudImage(image);
+        backgroundRenderer.loadBackgroudImage(backgroudImage);
 
         //Disegno lo sfondo.
         backgroundRenderer.draw();
@@ -253,7 +253,7 @@ public class ComputeScene {
         runner = runner.fetch(model.getDefaultOutputNode());
         List<Tensor<?>> run = runner.run();
         Tensor<?> outputTensor = run.get(0);
-        FloatBuffer inference = FloatBuffer.wrap(floatArrayOutputTensor);
+        FloatBuffer inference = FloatBuffer.wrap(inferenceArray);
         outputTensor.writeTo(inference);
         inputTensor.close();
         outputTensor.close();
@@ -262,16 +262,15 @@ public class ComputeScene {
         calibrator.setCameraView(sceneDataset.getViewmtx());
         calibrator.setDisplayRotation(90);//Devo settarla di default perchè qui lo schermo non ruota.
 
-//
-//        //Salvo il depth
-//        BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
-//        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-//        ImageIO.write(colorMap, "jpg", outputStreamDepth);
-//        outputStreamDepth.close();
+        //Salvo il depth
+        BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
+        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
+        ImageIO.write(colorMap, "jpg", outputStreamDepth);
+        outputStreamDepth.close();
 
-        objectRenderer.loadInference(inference, model.getOutputWidth(), model.getOutputHeight());
+        objectRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
         objectRenderer.setMaskEnabled(true);
-        objectRenderer.setObjScaleFactor(1.0f);
+        objectRenderer.setObjScaleFactor(0.5f);
 
         //Faccio il rendering degli oggetti.
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
@@ -284,25 +283,26 @@ public class ComputeScene {
             objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
         }
 
-//        //Salvo il rendering
-//        ByteBuffer byteBufferScreenshot = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
-//        int[] pixels = new int[byteBufferScreenshot.limit() / Integer.BYTES];
-//
-//        for (int i = 0; i < pixels.length; i++) {
-//            int tmp = 0;
-//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 24;
-//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 16;
-//            tmp |= (byteBufferScreenshot.get() & 0xFF) << 8;
-//            tmp |= (byteBufferScreenshot.get() & 0xFF);
-//            pixels[i] = tmp;
-//        }
-//
-//        BufferedImage screenshot = new BufferedImage(surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_ARGB);
-//        screenshot.setRGB(0,0, surfaceWidth, surfaceHeight, pixels, 0, surfaceWidth);
-//
-//        OutputStream outputStreamScreenshot = Files.newOutputStream(omaPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-//        ImageIO.write(screenshot, "jpg", outputStreamScreenshot);
-//        outputStreamScreenshot.close();
+        //Salvo il rendering
+        ByteBuffer pixelsBuffer = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
+        BufferedImage screenshot = new BufferedImage(surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB);
+        int bpp = screenshotRenderer.getColorType().getByteSize();
+
+        for(int x = 0; x < surfaceWidth; x++)
+        {
+            for(int y = 0; y < surfaceHeight; y++)
+            {
+                int i = (x + (surfaceWidth * y)) * bpp;
+                int r = pixelsBuffer.get(i) & 0xFF;
+                int g = pixelsBuffer.get(i + 1) & 0xFF;
+                int b = pixelsBuffer.get(i + 2) & 0xFF;
+                screenshot.setRGB(x, surfaceHeight - (y + 1), (0xFF << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        OutputStream outputStreamScreenshot = Files.newOutputStream(omaPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
+        ImageIO.write(screenshot, "jpg", outputStreamScreenshot);
+        outputStreamScreenshot.close();
     }
 
     private static <T> T requestInput(T[] objs, BufferedReader inReader) throws IOException {
@@ -341,9 +341,9 @@ public class ComputeScene {
         ComputeScene computeScene;
 
         System.out.println("Inserisci il direttorio del dataset:");
-        String datasetPathString = "C:\\Users\\bartn\\Desktop\\OMA\\SceneScripts\\06042020_145038";
+        String datasetPathString = inReader.readLine();
 
-//        if(datasetPathString == null) System.exit(0);
+        if(datasetPathString == null) System.exit(0);
 
         DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
 
@@ -374,8 +374,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-//        Path modelPath = requestInput(modelPaths, inReader);
-        Path modelPath = modelPaths[0];
+        Path modelPath = requestInput(modelPaths, inReader);
+//        Path modelPath = modelPaths[0];
 
         Model model = modelLoader.parseModel(modelPath);
         ScreenshotRenderer.ColorType colorType = ScreenshotRenderer.ColorType.parseByteSize(model.getInputDepth());
@@ -393,8 +393,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-//        Path objPath = requestInput(objPaths, inReader);
-        Path objPath = objPaths[0];
+        Path objPath = requestInput(objPaths, inReader);
+//        Path objPath = objPaths[0];
         System.out.println(objPath);
         Obj obj = objectLoader.parseObj(objPath);
 
@@ -408,8 +408,8 @@ public class ComputeScene {
             System.exit(1);
         }
 
-//        Path texturePath = requestInput(texturePaths, inReader);
-        Path texturePath = texturePaths[0];
+        Path texturePath = requestInput(texturePaths, inReader);
+//        Path texturePath = texturePaths[0];
         System.out.println(texturePath);
 
         BufferedImage texture = objectLoader.getTexutre(texturePath);

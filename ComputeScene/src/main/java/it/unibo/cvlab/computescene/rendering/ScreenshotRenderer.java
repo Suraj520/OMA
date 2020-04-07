@@ -1,5 +1,6 @@
 package it.unibo.cvlab.computescene.rendering;
 
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL30;
 
 import java.io.IOException;
@@ -149,9 +150,7 @@ public class ScreenshotRenderer {
 
         int bufferLength = scaledWidth * scaledHeight * colorType.getByteSize();
 
-        pixelDataBuffer = ByteBuffer.allocateDirect(bufferLength);
-        pixelDataBuffer.order(ByteOrder.nativeOrder());
-
+        pixelDataBuffer = BufferUtils.createByteBuffer(bufferLength);
         pixelDataIntArray = new int[bufferLength];
         pixelDataFloatArray = new float[bufferLength];
 
@@ -287,7 +286,7 @@ public class ScreenshotRenderer {
         // Read the pixels from pixel buffer.
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
         GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                colorType.getOpenglType(), GL30.GL_FLOAT, pixelDataBuffer);
+                colorType.getOpenglType(), GL30.GL_UNSIGNED_BYTE, pixelDataBuffer);
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
@@ -306,7 +305,7 @@ public class ScreenshotRenderer {
         // Read the pixels from pixel buffer.
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, colorType.getPixelStoreAlignment());
         GL30.glReadPixels(0, 0, scaledWidth, scaledHeight,
-                colorType.getOpenglType(), GL30.GL_FLOAT, pixelDataIntArray);
+                colorType.getOpenglType(), GL30.GL_UNSIGNED_BYTE, pixelDataIntArray);
         GL30.glPixelStorei(GL30.GL_PACK_ALIGNMENT, 4);
 
         ShaderUtil.checkGLError(TAG, "ScreenshotRendererSave");
@@ -344,5 +343,9 @@ public class ScreenshotRenderer {
 
     public int getScaledHeight() {
         return scaledHeight;
+    }
+
+    public ColorType getColorType() {
+        return colorType;
     }
 }
