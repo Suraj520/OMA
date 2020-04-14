@@ -62,13 +62,15 @@ public class ComputeScene {
     private Session session;
     private float[] inferenceArray;
     private ScreenshotRenderer.ColorType colorType;
+    private float objFactor;
+    private float lowerDelta;
 
     private Path depthPath;
     private Path omaPath;
 
-    private ColorMapper colorMapper = new ColorMapper(Utils.PLASMA_FACTOR, 4);
+    private ColorMapper colorMapper;
 
-    public ComputeScene(DatasetLoader datasetLoader, Path depthPath, Path omaPath, Model model, Obj obj, BufferedImage texture, ScreenshotRenderer.ColorType colorType) {
+    public ComputeScene(DatasetLoader datasetLoader, Path depthPath, Path omaPath, Model model, Obj obj, BufferedImage texture, ScreenshotRenderer.ColorType colorType, float objFactor, float lowerDelta) {
         this.datasetLoader = datasetLoader;
         this.depthPath = depthPath;
         this.omaPath = omaPath;
@@ -76,6 +78,9 @@ public class ComputeScene {
         this.obj = obj;
         this.texture = texture;
         this.colorType = colorType;
+        this.objFactor = objFactor;
+        this.lowerDelta = lowerDelta;
+        this.colorMapper = new ColorMapper(model.getPlasmaFactor(), 4);
     }
 
     public void load() throws IOException {
@@ -216,6 +221,9 @@ public class ComputeScene {
             objectRenderer.createOnGlThread(obj, texture);
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
             inferenceRenderer.createOnGlThread(colorType, surfaceWidth, surfaceHeight, model.getInputWidth(), model.getInputHeight());
+
+            objectRenderer.setObjScaleFactor(objFactor);
+            objectRenderer.setLowerDelta(lowerDelta);
         } catch (IOException e) {
             Log.log(Level.SEVERE, "Impossibile caricare shaders: "+e.getLocalizedMessage());
         }
@@ -258,6 +266,9 @@ public class ComputeScene {
         inputTensor.close();
         outputTensor.close();
 
+        //Normalizzo se necessario
+        inference = Model.normalize(inference, model.getOutputNormalization());
+
         calibrator.setCameraPerspective(sceneDataset.getProjmtx());
         calibrator.setCameraView(sceneDataset.getViewmtx());
         calibrator.setDisplayRotation(90);//Devo settarla di default perchè qui lo schermo non ruota.
@@ -276,8 +287,9 @@ public class ComputeScene {
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
+        calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), ancore, sceneDataset.getCameraPose());
+
         for (Pose ancora : ancore){
-            calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), ancora, sceneDataset.getCameraPose());
             objectRenderer.setScaleFactor(calibrator.getScaleFactor());
             objectRenderer.updateModelMatrix(ancora.getModelMatrix());
             objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
@@ -340,32 +352,6 @@ public class ComputeScene {
         ObjectLoader objectLoader = new ObjectLoader();
         ComputeScene computeScene;
 
-        System.out.println("Inserisci il direttorio del dataset:");
-        String datasetPathString = inReader.readLine();
-
-        if(datasetPathString == null) System.exit(0);
-
-        DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
-
-        Path imagesPath = datasetLoader.getImagesPath();
-        Path posesPath = datasetLoader.getPosesPath();
-
-        Path depthPath = imagesPath.resolve("depth");
-
-        if(!Files.isDirectory(depthPath))
-            Files.createDirectories(depthPath);
-
-        Path omaPath = imagesPath.resolve("oma");
-
-        if(!Files.isDirectory(omaPath))
-            Files.createDirectories(omaPath);
-
-        System.out.println("Images path: "+imagesPath);
-        System.out.println("Poses path: "+posesPath);
-        System.out.println("Depth path: "+depthPath);
-        System.out.println("OMA path: "+omaPath);
-        System.out.println("Numero frames: "+datasetLoader.getFrames());
-
         System.out.println("Seleziona il modello:");
         Path[] modelPaths = modelLoader.getModelPathSet().toArray(new Path[0]);
 
@@ -385,6 +371,38 @@ public class ComputeScene {
         System.out.println("Input Shape ("+model.getInputType()+"): "+ Arrays.toString(model.getInputShape()));
         System.out.println("Output Shape ("+model.getOutputType()+"): "+ Arrays.toString(model.getOutputShape()));
         System.out.println("Tipo colore utilizzato: "+colorType);
+
+        System.out.println("Inserisci il direttorio del dataset:");
+        String datasetPathString = inReader.readLine();
+
+        if(datasetPathString == null) System.exit(0);
+
+        DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
+
+        Path imagesPath = datasetLoader.getImagesPath();
+        Path posesPath = datasetLoader.getPosesPath();
+        Path resultsPath = datasetLoader.getResultsPath();
+
+        if(!Files.isDirectory(resultsPath))
+            Files.createDirectories(resultsPath);
+
+        Path depthPath = resultsPath.resolve(model.getName()).resolve("depth");
+
+        if(!Files.isDirectory(depthPath))
+            Files.createDirectories(depthPath);
+
+        Path omaPath = resultsPath.resolve(model.getName()).resolve("oma");
+
+        if(!Files.isDirectory(omaPath))
+            Files.createDirectories(omaPath);
+
+        System.out.println("Images path: "+imagesPath);
+        System.out.println("Poses path: "+posesPath);
+        System.out.println("Results path: "+resultsPath);
+        System.out.println("Depth path: "+depthPath);
+        System.out.println("OMA path: "+omaPath);
+
+        System.out.println("Numero frames: "+datasetLoader.getFrames());
 
         Path[] objPaths = objectLoader.getObjPathSet().toArray(new Path[0]);
 
@@ -414,13 +432,52 @@ public class ComputeScene {
 
         BufferedImage texture = objectLoader.getTexutre(texturePath);
 
+
+        System.out.println("Inserisci la dimensione degli oggetti (default "+ObjectRenderer.DEFAULT_OBJ_SCALE_FACTOR+"): ");
+        float objFactor;
+        do {
+            String tmp = inReader.readLine();
+
+            if(tmp == null) System.exit(0);
+
+            if(tmp.isEmpty()) {
+                objFactor = ObjectRenderer.DEFAULT_OBJ_SCALE_FACTOR;
+                break;
+            }
+
+            try {
+                objFactor = Float.parseFloat(tmp);
+            } catch (NumberFormatException e) {
+                objFactor = Float.NaN;
+            }
+        } while (Float.isNaN(objFactor) || objFactor <= 0.0f);
+
+        System.out.println("Inserisci il delta di occlusione (default "+ObjectRenderer.DEFAULT_LOWER_DELTA+"m): ");
+        float lowerDelta;
+        do {
+            String tmp = inReader.readLine();
+
+            if(tmp == null) System.exit(0);
+
+            if(tmp.isEmpty()){
+                lowerDelta = ObjectRenderer.DEFAULT_LOWER_DELTA;
+                break;
+            }
+
+            try {
+                lowerDelta = Float.parseFloat(tmp);
+            } catch (NumberFormatException e) {
+                lowerDelta = Float.NaN;
+            }
+        } while (Float.isNaN(lowerDelta));
+
         System.out.println("Configurazione completata.");
         System.out.println("Procedo alla post-produzione delle immagini (cartella oma)");
         System.out.println("Salvo anche una versione depth (cartella depth)");
 
         //Passo all'app datasetLoader, modello, oggetto e texture
 
-        computeScene = new ComputeScene(datasetLoader, depthPath, omaPath, model, obj, texture, colorType);
+        computeScene = new ComputeScene(datasetLoader, depthPath, omaPath, model, obj, texture, colorType, objFactor, lowerDelta);
 
         System.out.println("Precaricamento...");
         computeScene.load();

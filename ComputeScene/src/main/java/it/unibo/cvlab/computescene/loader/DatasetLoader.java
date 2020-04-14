@@ -28,6 +28,7 @@ public class DatasetLoader {
     private Path datasetPath;
     private Path imagesPath;
     private Path posesPath;
+    private Path resultsPath;
 
     private int frameCounter = 0;
     private int frames = 0;
@@ -43,6 +44,7 @@ public class DatasetLoader {
         this.datasetPath = datasetPath;
         this.imagesPath = this.datasetPath.resolve("images");
         this.posesPath = this.datasetPath.resolve("scenes");
+        this.resultsPath = this.datasetPath.resolve("results");
 
         //Conta dei frame
         //https://stackoverflow.com/questions/1844688/how-to-read-all-files-in-a-folder-from-java
@@ -81,6 +83,10 @@ public class DatasetLoader {
 
     public Path getPosesPath() {
         return posesPath;
+    }
+
+    public Path getResultsPath() {
+        return resultsPath;
     }
 
     public int currentFrame(){

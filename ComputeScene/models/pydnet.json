@@ -8,5 +8,7 @@
 	"inputShape":[1,448,640,3],
 	"inputType":"float32",
 	"outputShape":[1,448,640,1],
-	"outputType":"float32"
+	"outputType":"float32",
+	"outputNormalization":"none",
+	"plasmaFactor": 10.5
 }

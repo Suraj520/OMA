@@ -162,7 +162,7 @@ public class TensorflowLiteModel extends Model{
 
             //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
 //        tfliteOptions.setAllowFp16PrecisionForFp32(true);
-            tfliteOptions.setNumThreads(4);
+        tfliteOptions.setNumThreads(4);
 
 //        addGPUDelegate(tfliteOptions);
 //        addNNAPIDelegate(tfliteOptions);

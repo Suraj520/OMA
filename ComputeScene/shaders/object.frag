@@ -45,6 +45,7 @@ void main() {
         texcoord = vec2(texcoord.x, 1.0-texcoord.y);
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+        /*float pydnetDistance = exp(inferenceVector.r) * u_scaleFactor;*/
         float pydnetDistance = inferenceVector.r * u_scaleFactor;
 
         //Fai un pò di ricerca su dove cade il punto...

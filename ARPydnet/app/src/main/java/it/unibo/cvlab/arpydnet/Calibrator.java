@@ -399,8 +399,9 @@ public class Calibrator {
                 float distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
+                //predictedDistance = (float) Math.exp(predictedDistance);
                 //Faccio la somma: prendo una media PONDERATA dei punti.
-                sumScaleFactor += (distance / predictedDistance )* weight;
+                sumScaleFactor += (distance / predictedDistance ) * weight;
                 sumWeight += weight;
 
                 if(minDistance > distance) minDistance = distance;
@@ -465,6 +466,8 @@ public class Calibrator {
                     float distance = getDistance(pose, cameraPose);
                     //Ricavo la distanza pydnet.
                     float predictedDistance = inference.get(position);
+//                    predictedDistance = (float) Math.exp(predictedDistance);
+
                     //Faccio la somma: prendo una media PONDERATA dei punti.
                     sumScaleFactor += (distance / predictedDistance);
                     sumWeight += 1;
@@ -485,7 +488,7 @@ public class Calibrator {
         if(sumWeight > 0){
             float tmpScaleFactor = sumScaleFactor / sumWeight;
 
-            if(tmpScaleFactor <= MIN_SCALE_FACTOR || Float.isNaN(tmpScaleFactor)){
+            if(Float.isNaN(tmpScaleFactor)){
                 Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
             }else{
                 scaleFactor = tmpScaleFactor;

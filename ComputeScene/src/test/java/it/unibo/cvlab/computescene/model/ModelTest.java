@@ -21,10 +21,10 @@ public class ModelTest {
         outputNodes.add("PSD/resize_images_2/ResizeBilinear");
 
         int[] inputShape = new int[]{1, 448, 640, 3};
-        Model.Type inputType = Model.Type.float32;
+        Model.Type inputType = Model.Type.FLOAT_32;
 
         int[] outputShape = new int[]{1, 448, 640, 1};
-        Model.Type outputType = Model.Type.float32;
+        Model.Type outputType = Model.Type.FLOAT_32;
 
         Model model = new Model("Pydnet++", "pydnet.pb", inputNodes, outputNodes, "im0", "PSD/resize_images/ResizeBilinear", inputShape, inputType, outputShape, outputType);
 

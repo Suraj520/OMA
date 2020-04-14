@@ -3,6 +3,7 @@ package it.unibo.cvlab.computescene;
 import android.opengl.Matrix;
 
 import java.nio.FloatBuffer;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -146,75 +147,79 @@ public class Calibrator {
     /**
      * Calibra lo scale factor da un solo punto di osservazione.
      * @param inference risultato della pydnet
-     * @param objPose punto dell'oggetto
+     * @param objPoses lista dei punti dell'oggetto
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, int width, int height, Pose objPose, Pose cameraPose){
+    public void calibrateScaleFactor(FloatBuffer inference, int width, int height, Pose[] objPoses, Pose cameraPose){
 
-        //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
+        float sumScaleFactor = 0.0f;
+        int i = 0;
 
-        //Passaggio fondamentale: trasformazione delle coordinate.
-        float[] coords = new float[4];
+        for(Pose objPose : objPoses){
+            //Matrice usata per la trasformazione delle coordinate: world->view
+            float[] modelViewProjection = new float[16];
+            Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
 
-        coords[0] = objPose.getTx();
-        coords[1] = objPose.getTy();
-        coords[2] = objPose.getTz();
-        coords[3] = 1.0f;
+            //Passaggio fondamentale: trasformazione delle coordinate.
+            float[] coords = new float[4];
 
-        float[] projCoords = new float[4];
-        Matrix.multiplyMV(projCoords, 0, modelViewProjection,0, coords,0);
+            coords[0] = objPose.getTx();
+            coords[1] = objPose.getTy();
+            coords[2] = objPose.getTz();
+            coords[3] = 1.0f;
 
-        //Passaggio alle cordinate normali
-        projCoords[0] /= projCoords[3];
-        projCoords[1] /= projCoords[3];
+            float[] projCoords = new float[4];
+            Matrix.multiplyMV(projCoords, 0, modelViewProjection,0, coords,0);
 
-        //Clipping: se il punto è fuori dallo schermo non lo considero.
-        if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
-            Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
-            return;
-        }
+            //Passaggio alle cordinate normali
+            projCoords[0] /= projCoords[3];
+            projCoords[1] /= projCoords[3];
 
-        if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
-            Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
-            return;
-        }
-
-        //Viewport Transform
-        //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-        //Coordinate normalizzate(uv): [0.0,1.0]
-        //Origine in bottom-left.
-        //Seguo i fragment per la conversione.
-        float xFloat = (projCoords[0] * 0.5f) + 0.5f;
-        float yFloat = (projCoords[1] * 0.5f) + 0.5f;
-
-        //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-        float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-        //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * width);
-        int y = Math.round(finalCoords[1] * height);
-
-        int position = (width * y) + x;
-
-        inference.rewind();
-
-        if(inference.remaining() >= position){
-            float predictedDistance = inference.get(position);
-            float tmpScaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
-
-            if(tmpScaleFactor <= MIN_SCALE_FACTOR || Float.isNaN(tmpScaleFactor)){
-                Log.log(Level.INFO, "Invalid scale factor. Set: "+scaleFactor);
-            }else{
-                scaleFactor = tmpScaleFactor;
-                Log.log(Level.INFO, "Scale factor: "+scaleFactor);
+            //Clipping: se il punto è fuori dallo schermo non lo considero.
+            if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
+                Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
+                return;
             }
 
-        }else{
-            //Stranamente non riesco a trovare la predizione.
-            Log.log(Level.WARNING, "Impossibile trovare predizione di calibrazione");
-            scaleFactor = defaultScaleFactor;
+            if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
+                Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
+                return;
+            }
+
+            //Viewport Transform
+            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
+            //Coordinate normalizzate(uv): [0.0,1.0]
+            //Origine in bottom-left.
+            //Seguo i fragment per la conversione.
+            float xFloat = (projCoords[0] * 0.5f) + 0.5f;
+            float yFloat = (projCoords[1] * 0.5f) + 0.5f;
+
+            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
+            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
+
+            //Trasformo le coordinate normalizate in [0,width[, [0.height[
+            int x = Math.round(finalCoords[0] * width);
+            int y = Math.round(finalCoords[1] * height);
+
+            int position = (width * y) + x;
+
+            inference.rewind();
+
+            if(inference.remaining() >= position){
+                float predictedDistance = inference.get(position);
+                sumScaleFactor += getDistance(objPose, cameraPose) / predictedDistance;
+                i++;
+            }else{
+                //Stranamente non riesco a trovare la predizione.
+                Log.log(Level.WARNING, "Impossibile trovare predizione di calibrazione");
+            }
+        }
+
+        if (!Float.isNaN(sumScaleFactor)) {
+            scaleFactor = sumScaleFactor/i;
+            Log.log(Level.INFO, "Scale factor: "+scaleFactor);
+        } else {
+            Log.log(Level.INFO, "Invalid scale factor. Ignored");
         }
     }
 

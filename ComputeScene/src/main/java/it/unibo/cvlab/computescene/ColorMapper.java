@@ -86,6 +86,9 @@ public class ColorMapper {
 
         inference.rewind();
 
+
+        inference.rewind();
+
         int inferenceLength = inference.remaining();
         int length = Math.round(inferenceLength / (float)numberThread);
 

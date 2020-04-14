@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import org.tensorflow.Graph;
 
 import java.io.IOException;
+import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -12,13 +13,17 @@ import java.util.Set;
 public class Model {
 
     public enum Type{
-        uint8(Byte.BYTES, false),
-        float32(Float.BYTES, true),;
+        @SerializedName("uint8")
+        UINT_8("uint8", Byte.BYTES, false),
+        @SerializedName("float32")
+        FLOAT_32("float32", Float.BYTES, true),;
 
         private int byteSize;
         private boolean normalizationNeeded;
+        private String name;
 
-        Type(int byteSize, boolean normalizationNeeded) {
+        Type(String name, int byteSize, boolean normalizationNeeded) {
+            this.name = name;
             this.byteSize = byteSize;
             this.normalizationNeeded = normalizationNeeded;
         }
@@ -30,6 +35,163 @@ public class Model {
         public boolean isNormalizationNeeded() {
             return normalizationNeeded;
         }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    public enum Normalization{
+        @SerializedName("none")
+        NONE,
+        @SerializedName("linear")
+        LINEAR,
+        @SerializedName("exp")
+        EXPONENTIAL,
+        @SerializedName("linearInverse")
+        LINEAR_INVERSE,
+        @SerializedName("expInverse")
+        EXPONENTIAL_INVERSE,;
+    }
+
+    public static FloatBuffer normalize(FloatBuffer in, Normalization type){
+        if(type == null) type = Normalization.NONE;
+
+        switch (type){
+            case NONE:
+                return in;
+            case LINEAR:
+                return linearNormalization(in);
+            case LINEAR_INVERSE:
+                return inverseLinearNormalization(in);
+            case EXPONENTIAL:
+                return  expNormalization(in);
+            case EXPONENTIAL_INVERSE:
+                return inverseExpNormalization(in);
+            default:
+                throw new IllegalArgumentException("Normalizzazione non riconosciuta");
+        }
+    }
+
+    public static FloatBuffer linearNormalization(FloatBuffer in){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        float maxPred = Float.MIN_VALUE;
+        float minPred = Float.MAX_VALUE;
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            if(maxPred < pred) maxPred = pred;
+            if(minPred > pred) minPred = pred;
+        }
+
+        float range = maxPred - minPred;
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            out.put((pred-minPred)/range);
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
+    }
+
+    public static FloatBuffer inverseLinearNormalization(FloatBuffer in){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        float maxPred = Float.MIN_VALUE;
+        float minPred = Float.MAX_VALUE;
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            if(maxPred < pred) maxPred = pred;
+            if(minPred > pred) minPred = pred;
+        }
+
+        float range = maxPred - minPred;
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            out.put(1f-((pred-minPred)/range));
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
+    }
+
+    public static FloatBuffer expNormalization(FloatBuffer in){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        float maxPred = Float.MIN_VALUE;
+        float minPred = Float.MAX_VALUE;
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            pred = (float) Math.exp(pred);
+            if(maxPred < pred) maxPred = pred;
+            if(minPred > pred) minPred = pred;
+        }
+
+        float range = maxPred - minPred;
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            pred = (float) Math.exp(pred);
+            out.put((pred-minPred)/range);
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
+    }
+
+    public static FloatBuffer inverseExpNormalization(FloatBuffer in){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        float maxPred = Float.MIN_VALUE;
+        float minPred = Float.MAX_VALUE;
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            pred = (float) Math.exp(-pred);
+            if(maxPred < pred) maxPred = pred;
+            if(minPred > pred) minPred = pred;
+        }
+
+        float range = maxPred - minPred;
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            pred = (float) Math.exp(-pred);
+            out.put((pred-minPred)/range);
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
     }
 
     @Expose
@@ -75,6 +237,14 @@ public class Model {
     @SerializedName("outputType")
     private Type outputType;
 
+    @Expose
+    @SerializedName("outputNormalization")
+    private Normalization outputNormalization;
+
+    @Expose
+    @SerializedName("plasmaFactor")
+    private float plasmaFactor;
+
     private byte[] modelBytes;
     private Path modelsPath;
 
@@ -86,7 +256,7 @@ public class Model {
         this.modelsPath = modelsPath;
     }
 
-    public Model(String name, String fileName, Set<String> inputNodes, Set<String> outputNodes, String defaultInputNode, String defaultOutputNode, int[] inputShape, Type inputType, int[] outputShape, Type outputType) {
+    public Model(String name, String fileName, Set<String> inputNodes, Set<String> outputNodes, String defaultInputNode, String defaultOutputNode, int[] inputShape, Type inputType, int[] outputShape, Type outputType, Normalization outputNormalization) {
         this.name = name;
         this.fileName = fileName;
         this.inputNodes = inputNodes;
@@ -97,6 +267,7 @@ public class Model {
         this.inputType = inputType;
         this.outputShape = outputShape;
         this.outputType = outputType;
+        this.outputNormalization = outputNormalization;
     }
 
     public void addOutputNodes(String node){
@@ -212,4 +383,13 @@ public class Model {
     public boolean isNormalizationNeeded(){
         return inputType.isNormalizationNeeded();
     }
+
+    public Normalization getOutputNormalization() {
+        return outputNormalization;
+    }
+
+    public float getPlasmaFactor() {
+        return plasmaFactor;
+    }
+
 }

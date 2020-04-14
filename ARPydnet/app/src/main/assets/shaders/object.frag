@@ -82,7 +82,8 @@ void main() {
 
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-        float pydnetDistance = inferenceVector.r * u_scaleFactor;
+//        float predictedDistance = exp(inferenceVector.r) * u_scaleFactor;
+        float predictedDistance = inferenceVector.r * u_scaleFactor;
 
         //Fai un pò di ricerca su dove cade il punto...
 
@@ -92,7 +93,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance + u_lowerDelta){
+        if(distance > predictedDistance + u_lowerDelta){
             discard;
         }
     }
@@ -182,7 +183,7 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 
         //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+        float inferenceValue = exp(inferenceVector.r) * u_plasmaFactor;
 
         //Normalizzazione.
         if(inferenceValue < 0.0) inferenceValue = 0.0;
