@@ -155,11 +155,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private volatile boolean isProcessingFrame = false;
 
     //Qui parametri fissi della pydnet: dipendono dal modello caricato.
-    private static final Utils.Resolution RESOLUTION = Utils.Resolution.RES4;
+    private static final Utils.Resolution RESOLUTION = Utils.Resolution.RES5;
     private static final Utils.Scale SCALE = Utils.Scale.HALF;
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
-    private static final float COLOR_SCALE_FACTOR = 10.5f;
-    private static final float PLASMA_FACTOR = 255f;
 
     //Oggetti usati per l'unione della Pydnet e ARCore
     //Immagine dalla camera: usata per la maschera e per la pydnet.
@@ -185,7 +183,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             //Pydnet: ricavo il modello.
             //Oggetti per la pydnet
             ModelFactory modelFactory = new ModelFactory(getApplicationContext());
-            currentModel = modelFactory.getModel(ModelFactory.GeneralModel.DSNET);
+            currentModel = modelFactory.getModel(ModelFactory.GeneralModel.PYDNET_PP_V2);
             currentModel.prepare(RESOLUTION);
 //            currentModel.preparePool(NUMBER_THREADS);
         }
@@ -424,11 +422,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             }
         });
 
-//        prepareModel();
+        if(currentModel == null) prepareModel();
 
         calibrator = new Calibrator(MAPPER_SCALE_FACTOR, RESOLUTION, NUMBER_THREADS);
 
-        colorMapper = new ColorMapper(COLOR_SCALE_FACTOR, NUMBER_THREADS);
+        colorMapper = new ColorMapper(currentModel.getColorFactor(), NUMBER_THREADS);
         colorMapper.prepare(RESOLUTION);
 
         if(DEMO_MODE){
@@ -591,22 +589,22 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         try {
             // Create the texture and pass it to ARCore session to be filled during update().
             backgroundRenderer.createOnGlThread(/*context=*/ this);
-            backgroundRenderer.setPlasmaFactor(PLASMA_FACTOR);
+            backgroundRenderer.setPlasmaFactor(currentModel.getColorFactor());
 
             planeRenderer.createOnGlThread(/*context=*/ this, "models/leaf.png", "models/rain.png");
-            planeRenderer.setPlasmaFactor(PLASMA_FACTOR);
+            planeRenderer.setPlasmaFactor(currentModel.getColorFactor());
 
             pointCloudRenderer.createOnGlThread(/*context=*/ this);
 
             virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");
             virtualObject.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
-            virtualObject.setPlasmaFactor(PLASMA_FACTOR);
+            virtualObject.setPlasmaFactor(currentModel.getColorFactor());
 
             virtualObjectShadow.createOnGlThread(
                     /*context=*/ this, "models/andy_shadow.obj", "models/andy_shadow.png");
             virtualObjectShadow.setBlendMode(ObjectRenderer.BlendMode.Shadow);
             virtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
-            virtualObjectShadow.setPlasmaFactor(PLASMA_FACTOR);
+            virtualObjectShadow.setPlasmaFactor(currentModel.getColorFactor());
 
             screenshotRenderer.createOnGlThread(this, RESOLUTION);
 

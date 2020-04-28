@@ -34,6 +34,7 @@ public class ModelFactory {
 
     public enum GeneralModel{
         PYDNET_PP,
+        PYDNET_PP_V2,
         DSNET
     }
 
@@ -43,6 +44,7 @@ public class ModelFactory {
 
        //Aggiungo il modello
        models.put(GeneralModel.PYDNET_PP, createLitePydnetPP());
+       models.put(GeneralModel.PYDNET_PP_V2, createLitePydnetPPV2());
        models.put(GeneralModel.DSNET, createLiteDsnet());
     }
 
@@ -52,7 +54,7 @@ public class ModelFactory {
 
     private Model createLitePydnetPP(){
         Model pydnetPP;
-        pydnetPP = new TensorflowLiteModel(context, GeneralModel.PYDNET_PP, "Pydnet++", "pydnet_half_default.tflite");
+        pydnetPP = new TensorflowLiteModel(context, GeneralModel.PYDNET_PP, "Pydnet++", "pydnet_half_default.tflite", 10.5f, Utils.Resolution.RES4);
 
         //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
         //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.
@@ -62,28 +64,29 @@ public class ModelFactory {
         pydnetPP.addOutputNodes(Scale.QUARTER, "PSD/resize_images_1/ResizeBilinear");
         pydnetPP.addOutputNodes(Scale.HEIGHT, "PSD/resize_images_2/ResizeBilinear");
 
-        //Il modello caricato ha una specifica risoluzione d'ingresso.
-        pydnetPP.addValidResolution(Utils.Resolution.RES4);
+        return pydnetPP;
+    }
+
+    private Model createLitePydnetPPV2(){
+        Model pydnetPP;
+        pydnetPP = new TensorflowLiteModel(context, GeneralModel.PYDNET_PP_V2, "Pydnet++ v2", "pydnet_v2_half_default.tflite", 1.0f, Utils.Resolution.RES5);
+
+        pydnetPP.addInputNode("image", "im0");
+        pydnetPP.addOutputNodes(Scale.HALF, "half");
 
         return pydnetPP;
     }
 
     private Model createLiteDsnet(){
-        Model pydnetPP;
-        pydnetPP = new TensorflowLiteModel(context, GeneralModel.DSNET, "DSNET", "dsnet_half_default.tflite");
+        Model dsnetModel;
+        dsnetModel = new TensorflowLiteModel(context, GeneralModel.DSNET, "DSNET", "dsnet_half_default.tflite", 255.0f, Utils.Resolution.RES4);
 
-        //L'ottmizzazione riduce la rete piramidale ad un solo layer di uscita:
-        //non ho più bisogno di mappare le uscite e utilizzo il metodo più semplice.
+        dsnetModel.addInputNode("image", "im0");
+        dsnetModel.addOutputNodes(Scale.HALF, "MonocularNetwork/half");
+        dsnetModel.addOutputNodes(Scale.QUARTER, "MonocularNetwork/quarter");
+        dsnetModel.addOutputNodes(Scale.HEIGHT, "MonocularNetwork/height");
 
-        pydnetPP.addInputNode("image", "im0");
-        pydnetPP.addOutputNodes(Scale.HALF, "MonocularNetwork/half");
-        pydnetPP.addOutputNodes(Scale.QUARTER, "MonocularNetwork/quarter");
-        pydnetPP.addOutputNodes(Scale.HEIGHT, "MonocularNetwork/height");
-
-        //Il modello caricato ha una specifica risoluzione d'ingresso.
-        pydnetPP.addValidResolution(Utils.Resolution.RES4);
-
-        return pydnetPP;
+        return dsnetModel;
     }
 
 }

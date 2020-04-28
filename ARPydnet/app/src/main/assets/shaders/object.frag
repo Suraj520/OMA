@@ -83,13 +83,14 @@ void main() {
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 //        float predictedDistance = exp(inferenceVector.r) * u_scaleFactor;
-        float predictedDistance = inferenceVector.r * u_scaleFactor;
+//        float predictedDistance = inferenceVector.r * u_scaleFactor;
+        float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
 
         //Fai un pò di ricerca su dove cade il punto...
 
-        float dx = u_cameraPose.x-v_worldPos.x;
-        float dy = u_cameraPose.y-v_worldPos.y;
-        float dz = u_cameraPose.z-v_worldPos.z;
+        float dx = u_cameraPose.x - v_worldPos.x;
+        float dy = u_cameraPose.y - v_worldPos.y;
+        float dz = u_cameraPose.z - v_worldPos.z;
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
@@ -183,7 +184,7 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 
         //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = exp(inferenceVector.r) * u_plasmaFactor;
+        float inferenceValue = inferenceVector.r * u_plasmaFactor;
 
         //Normalizzazione.
         if(inferenceValue < 0.0) inferenceValue = 0.0;

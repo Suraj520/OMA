@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import it.unibo.cvlab.computescene.dataset.Point;
 import it.unibo.cvlab.computescene.dataset.Pose;
 
 public class Calibrator {
@@ -17,10 +18,10 @@ public class Calibrator {
     private static final float MIN_SCALE_FACTOR = 0.001f;
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
 
-    private static float getDistance(Pose objPose, Pose cameraPose){
-        float dx = cameraPose.getTx() - objPose.getTx();
-        float dy = cameraPose.getTy() - objPose.getTy();
-        float dz = cameraPose.getTz() - objPose.getTz();
+    private static float getDistance(Point point, Pose cameraPose){
+        float dx = cameraPose.getTx() - point.getTx();
+        float dy = cameraPose.getTy() - point.getTy();
+        float dz = cameraPose.getTz() - point.getTz();
 
         return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
     }
@@ -147,29 +148,31 @@ public class Calibrator {
     /**
      * Calibra lo scale factor da un solo punto di osservazione.
      * @param inference risultato della pydnet
-     * @param objPoses lista dei punti dell'oggetto
+     * @param points lista dei punti dell'oggetto
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, int width, int height, Pose[] objPoses, Pose cameraPose){
+    public void calibrateScaleFactor(FloatBuffer inference, int width, int height, Point[] points, Pose cameraPose){
 
         float sumScaleFactor = 0.0f;
-        int i = 0;
+        float sumWeight = 0.0f;
 
-        for(Pose objPose : objPoses){
+        for(Point point : points){
+            if(point == null) continue;
+
             //Matrice usata per la trasformazione delle coordinate: world->view
-            float[] modelViewProjection = new float[16];
-            Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
+            float[] viewProjectionMatrix = new float[16];
+            Matrix.multiplyMM(viewProjectionMatrix, 0, cameraPerspective, 0, cameraView, 0);
 
             //Passaggio fondamentale: trasformazione delle coordinate.
             float[] coords = new float[4];
 
-            coords[0] = objPose.getTx();
-            coords[1] = objPose.getTy();
-            coords[2] = objPose.getTz();
+            coords[0] = point.getTx();
+            coords[1] = point.getTy();
+            coords[2] = point.getTz();
             coords[3] = 1.0f;
 
             float[] projCoords = new float[4];
-            Matrix.multiplyMV(projCoords, 0, modelViewProjection,0, coords,0);
+            Matrix.multiplyMV(projCoords, 0, viewProjectionMatrix,0, coords,0);
 
             //Passaggio alle cordinate normali
             projCoords[0] /= projCoords[3];
@@ -177,13 +180,13 @@ public class Calibrator {
 
             //Clipping: se il punto è fuori dallo schermo non lo considero.
             if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
-                Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
-                return;
+                //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
+                continue;
             }
 
             if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
-                Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
-                return;
+                //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
+                continue;
             }
 
             //Viewport Transform
@@ -207,8 +210,8 @@ public class Calibrator {
 
             if(inference.remaining() >= position){
                 float predictedDistance = inference.get(position);
-                sumScaleFactor += getDistance(objPose, cameraPose) / predictedDistance;
-                i++;
+                sumScaleFactor += (getDistance(point, cameraPose) / predictedDistance) * point.getConfidence();
+                sumWeight += point.getConfidence();
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.log(Level.WARNING, "Impossibile trovare predizione di calibrazione");
@@ -216,7 +219,7 @@ public class Calibrator {
         }
 
         if (!Float.isNaN(sumScaleFactor)) {
-            scaleFactor = sumScaleFactor/i;
+            scaleFactor = sumScaleFactor / sumWeight;
             Log.log(Level.INFO, "Scale factor: "+scaleFactor);
         } else {
             Log.log(Level.INFO, "Invalid scale factor. Ignored");

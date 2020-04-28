@@ -25,6 +25,7 @@ import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
 import com.google.ar.core.Point;
+import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
@@ -62,6 +63,7 @@ import javax.microedition.khronos.opengles.GL10;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import it.unibo.cvlab.scenegenerator.save.PointCloudDataset;
 import it.unibo.cvlab.scenegenerator.save.SceneDataset;
 
 public class MainActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
@@ -73,6 +75,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private static final int datasetPath = R.string.dataset_path;
     private static final int imagesPath = R.string.images_path;
     private static final int scenesPath = R.string.scenes_path;
+    private static final int pointsPath = R.string.points_path;
 
     private static final float NEAR_PLANE  = 0.1f;
     private static final float FAR_PLANE  = 10.0f;
@@ -113,6 +116,11 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private String datasetPathString;
     private String imagesPathString;
     private String scenesPathString;
+    private String pointsPathString;
+
+    // Keep track of the last point cloud rendered to avoid updating the VBO if point cloud
+    // was not changed.  Do this using the timestamp since we can't compare PointCloud objects.
+    private long lastTimestamp = 0;
 
     private String datasetIdentifier;
 
@@ -135,6 +143,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         datasetPathString = getString(datasetPath);
         imagesPathString = getString(imagesPath);
         scenesPathString = getString(scenesPath);
+        pointsPathString = getString(pointsPath);
 
         //Binding tra XML e Java tramite ButterKnife
         ButterKnife.bind(this);
@@ -442,6 +451,29 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
             //Salvataggio del frame
             if(recordOn){
+
+                PointCloudDataset pointCloudDataset;
+
+                try (PointCloud pointCloud = frame.acquirePointCloud()) {
+                    if (pointCloud.getTimestamp() == lastTimestamp) {
+                        // Redundant call.
+                        return;
+                    }
+
+                    int numPoints = PointCloudDataset.getNumPoints(pointCloud);
+
+                    if(numPoints < 1){
+                        //Non ho abbastanza punti
+                        return;
+                    }
+
+                    lastTimestamp = pointCloud.getTimestamp();
+
+                    pointCloudDataset = PointCloudDataset.parseDataset(pointCloud, camera, surfaceWidth, surfaceHeight, NEAR_PLANE, FAR_PLANE);
+                }
+
+                final PointCloudDataset pointCloudDatasetFinal = pointCloudDataset;
+
                 final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, viewmtx, projmtx, anchors, frameCounter, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
                 dataset.setDisplayRotation(displayRotationHelper.getDisplayRotation());
 
@@ -450,6 +482,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 if(data.limit() > 0){
 //                    runInBackground(()->{
                         if(recordOn){
+                            savePointCloud(pointCloudDatasetFinal);
                             saveScene(dataset);
                             savePicture(data);
                             fileNameCounter++;
@@ -615,6 +648,35 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             outputStream.flush();
         }catch (IOException ex){
             Log.e(TAG, "Errore salvataggio dataset", ex);
+        }
+    }
+
+
+    public void savePointCloud(final PointCloudDataset dataset){
+        final File outPointCloud = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + pointsPathString) , fileNameCounter + ".json");
+
+        File parentFile = outPointCloud.getParentFile();
+
+        if(parentFile != null){
+            if (!parentFile.exists()) {
+                if (!parentFile.mkdirs()) {
+                    Log.e(TAG, "Errore creazione cartella point cloud");
+                    return;
+                }
+            }
+        }else{
+            Log.e(TAG, "Errore ricerca cartella point cloud");
+            return;
+        }
+
+
+        // Write it to disk.
+        try (OutputStreamWriter outputStream = new OutputStreamWriter(new FileOutputStream(outPointCloud), StandardCharsets.UTF_8)) {
+            String datasetString = GSON.toJson(dataset);
+            outputStream.write(datasetString);
+            outputStream.flush();
+        }catch (IOException ex){
+            Log.e(TAG, "Errore salvataggio point cloud", ex);
         }
     }
 

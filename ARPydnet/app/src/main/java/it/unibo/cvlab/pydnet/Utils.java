@@ -58,7 +58,11 @@ public class Utils {
     }
 
     public enum Resolution{
-        RES1(512,256), RES2(640,192), RES3(320,96), RES4(640,448), SER4(448, 640);
+        RES1(512,256),
+        RES2(640,192),
+        RES3(320,96),
+        RES4(640,448),
+        RES5(640,384);
 
         private final int width;
         private final int height;

@@ -16,7 +16,7 @@ public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
     private final static Logger Log = Logger.getLogger(ObjectRenderer.class.getSimpleName());
 
-    public static final float DEFAULT_LOWER_DELTA = 0.01f;
+    public static final float DEFAULT_LOWER_DELTA = 0.00f;
     public static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
 
     // Shader names.

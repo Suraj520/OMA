@@ -45,6 +45,8 @@ public class Model {
     public enum Normalization{
         @SerializedName("none")
         NONE,
+        @SerializedName("inverse")
+        INVERSE,
         @SerializedName("linear")
         LINEAR,
         @SerializedName("exp")
@@ -61,6 +63,8 @@ public class Model {
         switch (type){
             case NONE:
                 return in;
+            case INVERSE:
+                return inverse(in);
             case LINEAR:
                 return linearNormalization(in);
             case LINEAR_INVERSE:
@@ -72,6 +76,35 @@ public class Model {
             default:
                 throw new IllegalArgumentException("Normalizzazione non riconosciuta");
         }
+    }
+
+    public static FloatBuffer inverse(FloatBuffer in){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        float maxPred = Float.MIN_VALUE;
+        float minPred = Float.MAX_VALUE;
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            if(maxPred < pred) maxPred = pred;
+            if(minPred > pred) minPred = pred;
+        }
+
+        float range = maxPred - minPred;
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            out.put(range * (1f-((pred-minPred)/range)));
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
     }
 
     public static FloatBuffer linearNormalization(FloatBuffer in){

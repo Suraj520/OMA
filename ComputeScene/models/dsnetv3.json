@@ -1,0 +1,14 @@
+{
+	"name":"DsnetV3",
+	"fileName":"frozen_dsnetv3.pb",
+	"inputNodes":["im0"],
+	"outputNodes":["MonocularNetwork/half","MonocularNetwork/quarter","MonocularNetwork/height"],
+	"defaultInputNode":"im0",
+	"defaultOutputNode":"MonocularNetwork/half",
+	"inputShape":[1,448,640,3],
+	"inputType":"float32",
+	"outputShape":[1,448,640,1],
+	"outputType":"float32",
+	"outputNormalization":"linearInverse",
+	"plasmaFactor": 255.0
+}

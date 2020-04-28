@@ -1,6 +1,7 @@
 package it.unibo.cvlab.computescene;
 
 import de.javagl.obj.Obj;
+import it.unibo.cvlab.computescene.dataset.PointCloudDataset;
 import it.unibo.cvlab.computescene.dataset.Pose;
 import it.unibo.cvlab.computescene.dataset.SceneDataset;
 import it.unibo.cvlab.computescene.loader.DatasetLoader;
@@ -85,7 +86,7 @@ public class ComputeScene {
 
     public void load() throws IOException {
         //Devo ricavare info dal primo dataset
-        SceneDataset sceneDataset = datasetLoader.parseDataset();
+        SceneDataset sceneDataset = datasetLoader.parseSceneDataset();
 
         this.surfaceWidth = sceneDataset.getWidth();
         this.surfaceHeight = sceneDataset.getHeight();
@@ -193,8 +194,9 @@ public class ComputeScene {
             try {
                 //Carico dataset e immagine
                 BufferedImage image = datasetLoader.getImage();
-                SceneDataset sceneDataset = datasetLoader.parseDataset();
-                draw(image, sceneDataset);
+                SceneDataset sceneDataset = datasetLoader.parseSceneDataset();
+                PointCloudDataset pointCloudDataset = datasetLoader.parsePointDataset();
+                draw(image, sceneDataset, pointCloudDataset);
             } catch (IOException e) {
                 Log.log(Level.SEVERE, "Impossibile eseguire draw: "+e.getLocalizedMessage());
             }
@@ -230,7 +232,7 @@ public class ComputeScene {
 
     }
 
-    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset) throws IOException {
+    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset) throws IOException {
         System.out.println("Frame corrente:"+sceneDataset.getFrameNumber());
 
         //Binding dell'inference renderer
@@ -287,7 +289,7 @@ public class ComputeScene {
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
-        calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), ancore, sceneDataset.getCameraPose());
+        calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose());
 
         for (Pose ancora : ancore){
             objectRenderer.setScaleFactor(calibrator.getScaleFactor());
@@ -380,8 +382,9 @@ public class ComputeScene {
         DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
 
         Path imagesPath = datasetLoader.getImagesPath();
-        Path posesPath = datasetLoader.getPosesPath();
+        Path scenesPath = datasetLoader.getScenesPath();
         Path resultsPath = datasetLoader.getResultsPath();
+        Path pointsPath = datasetLoader.getPointsPath();
 
         if(!Files.isDirectory(resultsPath))
             Files.createDirectories(resultsPath);
@@ -396,8 +399,11 @@ public class ComputeScene {
         if(!Files.isDirectory(omaPath))
             Files.createDirectories(omaPath);
 
+
+
         System.out.println("Images path: "+imagesPath);
-        System.out.println("Poses path: "+posesPath);
+        System.out.println("Scenes path: "+scenesPath);
+        System.out.println("Points path: "+pointsPath);
         System.out.println("Results path: "+resultsPath);
         System.out.println("Depth path: "+depthPath);
         System.out.println("OMA path: "+omaPath);

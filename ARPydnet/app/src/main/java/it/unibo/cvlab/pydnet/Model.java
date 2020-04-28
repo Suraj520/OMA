@@ -145,13 +145,13 @@ public abstract class Model{
         }
     }
 
-    protected final String checkpoint;
-    protected Map<Scale, String> outputNodes;
-    protected Set<Resolution> validResolutions;
-    protected ModelFactory.GeneralModel generalModel;
+    private final String checkpoint;
+    private Map<Scale, String> outputNodes;
+    private ModelFactory.GeneralModel generalModel;
     protected String name;
-    protected HashMap<String, float[]> results;
-    protected HashMap<String, String> inputNodes;
+    private HashMap<String, String> inputNodes;
+
+    private float colorFactor;
 
     protected boolean prepared;
 
@@ -172,15 +172,15 @@ public abstract class Model{
         }
     }
 
-    public Model(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
+    Model(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint, float colorFactor, Resolution resolution){
+        this.colorFactor = colorFactor;
+        this.resolution = resolution;
         this.prepared = false;
         this.generalModel = generalModel;
         this.name = name;
         this.outputNodes = new HashMap<>();
         this.inputNodes = new HashMap<>();
         this.checkpoint = checkpoint;
-        this.validResolutions = new TreeSet<>();
-        this.results = new HashMap<>();
     }
 
 
@@ -193,8 +193,24 @@ public abstract class Model{
             this.inputNodes.put(name, node);
     }
 
-    public void addValidResolution(Resolution resolution){
-        this.validResolutions.add(resolution);
+    public String getCheckpoint() {
+        return checkpoint;
+    }
+
+    public ModelFactory.GeneralModel getGeneralModel() {
+        return generalModel;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public float getColorFactor() {
+        return colorFactor;
+    }
+
+    public Resolution getResolution() {
+        return resolution;
     }
 
     public String getInputNode(String name){

@@ -1,0 +1,14 @@
+{
+	"name":"PydnetV3",
+	"fileName":"frozen_pydnet_v3.pb",
+	"inputNodes":["im0"],
+	"outputNodes":["decoder/half/resize/ResizeBilinear"],
+	"defaultInputNode":"im0",
+	"defaultOutputNode":"decoder/half/resize/ResizeBilinear",
+	"inputShape":[1,384,640,3],
+	"inputType":"float32",
+	"outputShape":[1,384,640,1],
+	"outputType":"float32",
+	"outputNormalization":"inverse",
+	"plasmaFactor": 1.0
+}

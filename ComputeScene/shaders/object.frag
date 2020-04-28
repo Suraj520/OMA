@@ -48,8 +48,6 @@ void main() {
         /*float pydnetDistance = exp(inferenceVector.r) * u_scaleFactor;*/
         float pydnetDistance = inferenceVector.r * u_scaleFactor;
 
-        //Fai un pò di ricerca su dove cade il punto...
-
         float dx = u_cameraPose.x-v_worldPos.x;
         float dy = u_cameraPose.y-v_worldPos.y;
         float dz = u_cameraPose.z-v_worldPos.z;

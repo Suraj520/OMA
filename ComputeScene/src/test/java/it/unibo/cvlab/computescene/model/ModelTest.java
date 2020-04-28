@@ -26,7 +26,7 @@ public class ModelTest {
         int[] outputShape = new int[]{1, 448, 640, 1};
         Model.Type outputType = Model.Type.FLOAT_32;
 
-        Model model = new Model("Pydnet++", "pydnet.pb", inputNodes, outputNodes, "im0", "PSD/resize_images/ResizeBilinear", inputShape, inputType, outputShape, outputType);
+        Model model = new Model("Pydnet++", "pydnet.pb", inputNodes, outputNodes, "im0", "PSD/resize_images/ResizeBilinear", inputShape, inputType, outputShape, outputType, Model.Normalization.NONE);
 
         GsonBuilder builder = new GsonBuilder().excludeFieldsWithoutExposeAnnotation();
         Gson gson = builder.create();

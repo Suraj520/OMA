@@ -1,0 +1,14 @@
+{
+	"name":"PydnetV2",
+	"fileName":"frozen_pydnet_v2.pb",
+	"inputNodes":["im0"],
+	"outputNodes":["half"],
+	"defaultInputNode":"im0",
+	"defaultOutputNode":"half",
+	"inputShape":[1,384,640,3],
+	"inputType":"float32",
+	"outputShape":[1,384,640,1],
+	"outputType":"float32",
+	"outputNormalization":"inverse",
+	"plasmaFactor": 1.0
+}

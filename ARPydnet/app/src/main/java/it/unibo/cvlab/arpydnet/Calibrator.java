@@ -399,6 +399,7 @@ public class Calibrator {
                 float distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
+                predictedDistance = 255.0f - predictedDistance;
                 //predictedDistance = (float) Math.exp(predictedDistance);
                 //Faccio la somma: prendo una media PONDERATA dei punti.
                 sumScaleFactor += (distance / predictedDistance ) * weight;
@@ -466,11 +467,15 @@ public class Calibrator {
                     float distance = getDistance(pose, cameraPose);
                     //Ricavo la distanza pydnet.
                     float predictedDistance = inference.get(position);
+                    predictedDistance = 255.0f - predictedDistance;
 //                    predictedDistance = (float) Math.exp(predictedDistance);
 
                     //Faccio la somma: prendo una media PONDERATA dei punti.
-                    sumScaleFactor += (distance / predictedDistance);
-                    sumWeight += 1;
+                    //Le ancore hanno un basso contributo:
+                    //A differenza del point cloud, le ancore potrebbero essere posizionate dietro
+                    //ad oggetti
+                    sumScaleFactor += (distance / predictedDistance) * 0.1f;
+                    sumWeight += 0.1f;
 
                     if(minDistance > distance) minDistance = distance;
                     if(maxDistance < distance) maxDistance = distance;

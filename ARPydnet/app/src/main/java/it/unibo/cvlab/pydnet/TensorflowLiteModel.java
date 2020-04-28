@@ -144,8 +144,8 @@ public class TensorflowLiteModel extends Model{
     protected ByteBuffer inference;
 
 
-    public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
-        super(context, generalModel, name, checkpoint);
+    public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint, float colorFactor, Utils.Resolution resolution){
+        super(context, generalModel, name, checkpoint, colorFactor, resolution);
 
         if(useNativeTfLite){
             try {
@@ -161,7 +161,7 @@ public class TensorflowLiteModel extends Model{
             Interpreter.Options tfliteOptions = new Interpreter.Options();
 
             //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
-//        tfliteOptions.setAllowFp16PrecisionForFp32(true);
+//      tfliteOptions.setAllowFp16PrecisionForFp32(true);
         tfliteOptions.setNumThreads(4);
 
 //        addGPUDelegate(tfliteOptions);

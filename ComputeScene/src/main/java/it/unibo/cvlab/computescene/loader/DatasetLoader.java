@@ -2,15 +2,14 @@ package it.unibo.cvlab.computescene.loader;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import it.unibo.cvlab.computescene.dataset.PointCloudDataset;
 import it.unibo.cvlab.computescene.dataset.SceneDataset;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.awt.image.ColorModel;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,14 +26,16 @@ public class DatasetLoader {
 
     private Path datasetPath;
     private Path imagesPath;
-    private Path posesPath;
+    private Path scenesPath;
     private Path resultsPath;
+    private Path pointsPath;
 
     private int frameCounter = 0;
     private int frames = 0;
 
     private BufferedImage image = null;
-    private SceneDataset dataset = null;
+    private SceneDataset sceneDataset = null;
+    private PointCloudDataset pointDataset = null;
 
     public DatasetLoader(String datasetPath) throws IOException {
         this(Paths.get(datasetPath));
@@ -43,8 +44,9 @@ public class DatasetLoader {
     public DatasetLoader(Path datasetPath) throws IOException {
         this.datasetPath = datasetPath;
         this.imagesPath = this.datasetPath.resolve("images");
-        this.posesPath = this.datasetPath.resolve("scenes");
+        this.scenesPath = this.datasetPath.resolve("scenes");
         this.resultsPath = this.datasetPath.resolve("results");
+        this.pointsPath = this.datasetPath.resolve("points");
 
         //Conta dei frame
         //https://stackoverflow.com/questions/1844688/how-to-read-all-files-in-a-folder-from-java
@@ -59,7 +61,7 @@ public class DatasetLoader {
         if(hasNext()){
             frameCounter++;
             image = null;
-            dataset = null;
+            sceneDataset = null;
         }
     }
 
@@ -70,7 +72,7 @@ public class DatasetLoader {
     public void rewind(){
         frameCounter = 0;
         image = null;
-        dataset = null;
+        sceneDataset = null;
     }
 
     public Path getDatasetPath() {
@@ -81,12 +83,16 @@ public class DatasetLoader {
         return imagesPath;
     }
 
-    public Path getPosesPath() {
-        return posesPath;
+    public Path getScenesPath() {
+        return scenesPath;
     }
 
     public Path getResultsPath() {
         return resultsPath;
+    }
+
+    public Path getPointsPath() {
+        return pointsPath;
     }
 
     public int currentFrame(){
@@ -113,15 +119,26 @@ public class DatasetLoader {
         return image;
     }
 
-    public SceneDataset parseDataset() throws IOException {
-        if(dataset != null)
-            return dataset;
+    public SceneDataset parseSceneDataset() throws IOException {
+        if(sceneDataset != null)
+            return sceneDataset;
 
-        Path scenePath = posesPath.resolve(frameCounter+".json");
+        Path scenePath = scenesPath.resolve(frameCounter+".json");
         Reader reader = Files.newBufferedReader(scenePath);
-        dataset = gson.fromJson(reader, SceneDataset.class);
+        sceneDataset = gson.fromJson(reader, SceneDataset.class);
         reader.close();
-        return dataset;
+        return sceneDataset;
+    }
+
+    public PointCloudDataset parsePointDataset() throws IOException{
+        if(pointDataset != null)
+            return pointDataset;
+
+        Path pointPath = pointsPath.resolve(frameCounter+".json");
+        Reader reader = Files.newBufferedReader(pointPath);
+        pointDataset = gson.fromJson(reader, PointCloudDataset.class);
+        reader.close();
+        return pointDataset;
     }
 
 }
