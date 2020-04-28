@@ -36,7 +36,7 @@ import de.javagl.obj.ObjUtils;
 public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
 
-    private static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
+    private static final float DEFAULT_OBJ_SCALE_FACTOR = 0.5f;
 
     // Shader names.
     private static final String VERTEX_SHADER_NAME = "shaders/object.vert";
