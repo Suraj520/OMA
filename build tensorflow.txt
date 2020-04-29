@@ -1,0 +1,26 @@
+sudo apt install libncurses5 libncurses5-dev libncursesw5-dev
+sudo apt install python3 python3-pip
+python3 -m pip install numpy
+
+#Scaricare android sdk: installare NDK 17 o 18, build tools platform
+
+./sdkmanager --sdk_root=/home/luca/Android/Sdk 'build-tools;29.0.3' 'cmake;3.10.2.4988404' 'cmake;3.6.4111459' 'cmdline-tools;1.0' 'cmdline-tools;latest' 'lldb;3.1' 'ndk;17.2.4988734' 'ndk;18.1.5063045' 'platform-tools' 'platforms;android-29'
+#./sdkmanager --sdk_root=/home/luca/Android/Sdk 'build-tools;29.0.3' 'platforms;android-29'
+
+git clone https://github.com/tensorflow/tensorflow.git
+
+#Se bazel da errore: git checkout r2.2
+
+cd tensorflow
+
+./configure
+
+#Mettere python3 e configurare il workspace
+
+bazel build -c opt --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+  --host_crosstool_top=@bazel_tools//tools/cpp:toolchain \
+  //tensorflow/lite/java:tensorflow-lite
+
+bazel build -c opt --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+  --host_crosstool_top=@bazel_tools//tools/cpp:toolchain \
+  //tensorflow/lite/java:tensorflow-lite-gpu

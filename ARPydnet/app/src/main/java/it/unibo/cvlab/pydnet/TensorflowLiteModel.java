@@ -10,6 +10,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import org.tensorflow.lite.Interpreter;
+//import org.tensorflow.lite.experimental.GpuDelegate;
+
 import org.tensorflow.lite.gpu.GpuDelegate;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
 
@@ -140,6 +142,7 @@ public class TensorflowLiteModel extends Model{
 
     private ByteBuffer inputBackup;
     protected ByteBuffer input;
+    protected ByteBuffer inputFake;
 
     protected ByteBuffer inference;
 
@@ -202,11 +205,13 @@ public class TensorflowLiteModel extends Model{
 
         //RGB: per ogni canale un float (4 byte) il tutto va moltiplicato per il numero di pixel (W*H)
         input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
+//        inputFake = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * DATA_SIZE / 2);
 
         //Qui ho solo il canale di profondità: restituisce un float di distanza per ogni pixel.
         inference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
 
         input.order(ByteOrder.nativeOrder());
+//        inputFake.order(ByteOrder.nativeOrder());
         inference.order(ByteOrder.nativeOrder());
 
         isPrepared = true;

@@ -155,8 +155,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private volatile boolean isProcessingFrame = false;
 
     //Qui parametri fissi della pydnet: dipendono dal modello caricato.
-    private static final Utils.Resolution RESOLUTION = Utils.Resolution.RES5;
-    private static final Utils.Scale SCALE = Utils.Scale.HALF;
+    private static final Utils.Resolution RESOLUTION = Utils.Resolution.RES4;
+    private static final Utils.Scale SCALE = Utils.Scale.HEIGHT;
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
 
     //Oggetti usati per l'unione della Pydnet e ARCore
@@ -183,7 +183,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             //Pydnet: ricavo il modello.
             //Oggetti per la pydnet
             ModelFactory modelFactory = new ModelFactory(getApplicationContext());
-            currentModel = modelFactory.getModel(ModelFactory.GeneralModel.PYDNET_PP_V2);
+            currentModel = modelFactory.getModel(ModelFactory.GeneralModel.PYDNET_PP);
             currentModel.prepare(RESOLUTION);
 //            currentModel.preparePool(NUMBER_THREADS);
         }
