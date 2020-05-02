@@ -10,7 +10,6 @@ import com.google.ar.core.Pose;
 import java.nio.FloatBuffer;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Random;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -27,7 +26,6 @@ public class Calibrator {
 
     private static final int MAX_POINTS = 250;
     private static final int MIN_POINTS = 1;
-    private static final float MIN_SCALE_FACTOR = 0.001f;
     private static final int MIN_QUANTIZER_LEVELS = 2;
     private static final int MAX_QUANTIZER_LEVELS = 256;
     private static final int MAX_QUANTIZER_MASK = 0xFF;
@@ -37,20 +35,20 @@ public class Calibrator {
         return pointsBuffer.remaining() / FLOATS_PER_POINT;
     }
 
-    private static float getDistance(Pose objPose, Pose cameraPose){
+    private static double getDistance(Pose objPose, Pose cameraPose){
         float dx = cameraPose.tx() - objPose.tx();
         float dy = cameraPose.ty() - objPose.ty();
         float dz = cameraPose.tz() - objPose.tz();
 
-        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
     }
 
-    private static float getDistance(float x, float y, float z, Pose cameraPose){
+    private static double getDistance(float x, float y, float z, Pose cameraPose){
         float dx = cameraPose.tx() - x;
         float dy = cameraPose.ty() - y;
         float dz = cameraPose.tz() - z;
 
-        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
     }
 
     private float[] cameraView;
@@ -78,34 +76,23 @@ public class Calibrator {
     }
 
     private final float defaultScaleFactor;
-    private float scaleFactor;
+    private double scaleFactor;
 
     public void setScaleFactor(float scaleFactor) {
         this.scaleFactor = scaleFactor;
     }
 
-    public float getScaleFactor(){
+    public double getScaleFactor(){
         return scaleFactor;
     }
 
-    public float minPredictedDistance = Float.MAX_VALUE, maxPredictedDistance = Float.MIN_VALUE;
-    public float minDistance = Float.MAX_VALUE, maxDistance = Float.MIN_VALUE;
+    private double bestMSE;
 
-    public float getMinPredictedDistance() {
-        return minPredictedDistance;
+    public double getBestMSE() {
+        return bestMSE;
     }
 
-    public float getMaxPredictedDistance() {
-        return maxPredictedDistance;
-    }
-
-    public float getMinDistance() {
-        return minDistance;
-    }
-
-    public float getMaxDistance() {
-        return maxDistance;
-    }
+    private float maxPredictedDistance;
 
     private int numVisiblePoints;
 
@@ -206,7 +193,7 @@ public class Calibrator {
      * @param objPose punto dell'oggetto
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose){
+    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose){
 
         //Matrice usata per la trasformazione delle coordinate: world->view
         float[] modelViewProjection = new float[16];
@@ -230,12 +217,12 @@ public class Calibrator {
         //Clipping: se il punto è fuori dallo schermo non lo considero.
         if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
             Log.w(TAG, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
-            return;
+            return scaleFactor;
         }
 
         if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
             Log.w(TAG, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
-            return;
+            return scaleFactor;
         }
 
         //Viewport Transform
@@ -259,12 +246,19 @@ public class Calibrator {
 
         if(inference.remaining() >= position){
             float predictedDistance = inference.get(position);
-            scaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
+            double myScaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
+
+            if(Double.isNaN(myScaleFactor)){
+                Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
+            }else{
+                scaleFactor = myScaleFactor;
+            }
         }else{
             //Stranamente non riesco a trovare la predizione.
-            Log.w(TAG, "Impossibile trovare predizione di calibrazione");
-            scaleFactor = defaultScaleFactor;
+            Log.d(TAG, "Impossibile trovare predizione di calibrazione");
         }
+
+        return scaleFactor;
     }
 
     /**
@@ -276,7 +270,7 @@ public class Calibrator {
      * @param rawY 0 <= y < height sullo schermo
      * @return scale factor
      */
-    public float calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose, int rawX, int rawY){
+    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose, int rawX, int rawY){
         //Origine dei punti Top-left
         //Devo ricavare i punti relativi
         float xFloat = (float) rawX/surfaceWidth;
@@ -305,6 +299,9 @@ public class Calibrator {
         return scaleFactor;
     }
 
+    /**
+     * Classe wrapper per un punto RANSAC.
+     */
     private static class RansacObject {
         double scaleFactor;
         float arConfidence;
@@ -379,14 +376,21 @@ public class Calibrator {
         }
     }
 
-    public float calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud, Pose cameraPose, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
+    /**
+     * Calcola il fattore di scala tramite algoritmo RANSAC.
+     * Dovrebbe essere più robusto rispetto al calcolo tramite media
+     *
+     * @param inference stima di profondità
+     * @param cloud point cloud da cui calcolare il fattore di scala
+     * @param cameraPose posa della camera per il calcolo della distanza
+     * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
+     * @param possibiliInlierDivider divisore del numero di punti inlier: indica la dimensione del set di possibili inlier
+     * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set: indica la dimensione minima del miglior consensus set.
+     * @return fattore di scala trovato tramite RANSAC
+     */
+    public double calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud, Pose cameraPose, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
         if(possibiliInlierDivider <= migliorConsensusSetDivider)
             throw new IllegalArgumentException("divisori non validi");
-
-        if (cloud.getTimestamp() == lastTimestamp) {
-            // Redundant call.
-            return scaleFactor;
-        }
 
         //Vettore con le World-Coords
         //X,Y,Z,Confidence
@@ -410,6 +414,8 @@ public class Calibrator {
         if(numPoints < possibiliInlierDivider) return scaleFactor;
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
+
+        float myMaxPredictedDistance = Float.MIN_VALUE;
 
         //Calcolo di ogni singolo scaleFactor O(N)
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
@@ -463,12 +469,14 @@ public class Calibrator {
                 double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
 
                 //Ricavo la distanza pydnet.
-                double predictedDistance = inference.get(position);
+                float predictedDistance = inference.get(position);
                 predictedDistance = 255.0f - predictedDistance;
 
                 ransacObjects[numVisiblePoints] = new RansacObject();
                 ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );
                 ransacObjects[numVisiblePoints].arConfidence = arConfidence;
+
+                if(predictedDistance > myMaxPredictedDistance) myMaxPredictedDistance = predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
@@ -533,18 +541,20 @@ public class Calibrator {
             //Alterazione dell'algoritmo: calcolo del valore di soglia per aggiungere un punto
             //al consensusset: uso l'errore quadratico massimo presente in possibiliInlier
 
-            double maxSquareError = 0.0; //Errore Quadratico massimo presente in possibiliInlier
+            //Provo con MSE invece che con l'errore quadratico massimo come punto di sbarramento
 
-            //Si potrebbe far pesare una possibile confidenza pydnet qui:
+            double mseThreshold = 0.0; //Errore Quadratico massimo presente in possibiliInlier
+
+            //Si potrebbe far pesare una possibile confidenza di stima qui:
             //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
             double sumEstimationConfidence = 0.0;
 
             for (int k = 0; k < puntiPerPossibiliInlier; k++){
                 RansacObject nextObj = ransacObjects[possibiliInlier[k]];
-                maxSquareError += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                mseThreshold += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
                 sumEstimationConfidence +=1;
             }
-            maxSquareError /= sumEstimationConfidence;
+            mseThreshold /= sumEstimationConfidence;
 
             //consensusSet: Candidato a diventare migliorConsensusSet
             //ConsensusSet inizializzato a possibiliInlier
@@ -553,6 +563,7 @@ public class Calibrator {
 
             //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
             for (int k = 0, j = 0; k < numVisiblePoints-puntiPerPossibiliInlier; k++){
+                //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
                     //Punto presente in possibiliInlier: skip
                     j++;
@@ -563,8 +574,8 @@ public class Calibrator {
 
                 double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
 
-                //Se l'errore è minore di maxSquareError aggiungo il punto
-                if(squareError < maxSquareError){
+                //Se l'errore è minore del threshold aggiungo il punto
+                if(squareError < mseThreshold){
                     consensusSet[puntiConensusSet++] = k;
 
                     //Aggiorno le somme, MA NON maxSquareError:
@@ -581,7 +592,7 @@ public class Calibrator {
                 //Calcolo l'errore quadratico medio
                 double mse = 0.0;
 
-                //Si potrebbe far pesare una possibile confidenza pydnet qui:
+                //Si potrebbe far pesare una possibile confidenza di stima qui:
                 //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
                 sumEstimationConfidence = 0.0;
 
@@ -605,7 +616,9 @@ public class Calibrator {
         if(Double.isNaN(migliorScaleFactor)){
             Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
         }else{
-            scaleFactor = (float) migliorScaleFactor;
+            scaleFactor = migliorScaleFactor;
+            bestMSE = migliorMSE;
+            maxPredictedDistance = myMaxPredictedDistance;
         }
 
         return scaleFactor;
@@ -616,17 +629,14 @@ public class Calibrator {
 
     /**
      * Cerca di trovare lo scale factor tra pydnet e arcore, tramite point cloud.
+     * Uso una media ponderata per il calcolo.
+     * Dipende dall'affidabilità della stima.
      *
      * @param inference risultato della pydnet
      * @param cloud nuovola di punti di arcore
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public float calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
-        if (cloud.getTimestamp() == lastTimestamp) {
-            // Redundant call.
-            return scaleFactor;
-        }
-
+    public double calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
         //Vettore con le World-Coords
         //X,Y,Z,Confidence
         float[] coords = new float[4];
@@ -656,10 +666,7 @@ public class Calibrator {
         float sumScaleFactor = 0;
         float sumWeight = 0;
 
-        float minPredictedDistance = Float.MAX_VALUE;
-        float maxPredictedDistance = Float.MIN_VALUE;
-        float minDistance = Float.MAX_VALUE;
-        float maxDistance = Float.MIN_VALUE;
+        float myMaxPredictedDistance = Float.MIN_VALUE;
 
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
@@ -709,7 +716,7 @@ public class Calibrator {
 
             if(inference.remaining() >= position){
                 //Ricavo la distanza.
-                float distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
+                double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
                 predictedDistance = 255.0f - predictedDistance;
@@ -718,10 +725,7 @@ public class Calibrator {
                 sumScaleFactor += (distance / predictedDistance ) * weight;
                 sumWeight += weight;
 
-                if(minDistance > distance) minDistance = distance;
-                if(maxDistance < distance) maxDistance = distance;
-                if(minPredictedDistance > predictedDistance) minPredictedDistance = predictedDistance;
-                if(maxPredictedDistance < predictedDistance) maxPredictedDistance = predictedDistance;
+                if(myMaxPredictedDistance < predictedDistance) myMaxPredictedDistance = predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
@@ -737,17 +741,22 @@ public class Calibrator {
                 Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
             }else{
                 scaleFactor = tmpScaleFactor;
+                maxPredictedDistance = myMaxPredictedDistance;
             }
         }
-
-        this.minDistance = minDistance;
-        this.maxDistance = maxDistance;
-        this.minPredictedDistance = minPredictedDistance;
-        this.maxPredictedDistance = maxPredictedDistance;
 
         points.rewind();
 
         return scaleFactor;
+    }
+
+    /**
+     * Verifica che il point cloud sia aggiornato
+     * @param cloud point cloud di riferimento della scena
+     * @return vero se il timestamp del point cloud è cambiato
+     */
+    public boolean isLastTimestampDifferent(PointCloud cloud){
+        return cloud.getTimestamp() != lastTimestamp;
     }
 
     public float getQuantizerFactor(){
@@ -854,7 +863,7 @@ public class Calibrator {
      * @param rawY y test
      * @return Se il risultato è prossimo a zero allora il test ha successo.
      */
-    public float xyTest(Pose objPose, float rawX, float rawY){
+    public double xyTest(Pose objPose, float rawX, float rawY){
         //Matrice usata per la trasformazione delle coordinate: world->view
         float[] modelViewProjection = new float[16];
         Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
@@ -897,7 +906,7 @@ public class Calibrator {
         double dx = rawX - x;
         double dy = rawY - y;
 
-        return  (float)Math.sqrt(dx*dx+dy*dy);
+        return  Math.sqrt(dx*dx+dy*dy);
     }
 
     /**
@@ -910,7 +919,7 @@ public class Calibrator {
      * @param rawY coordinata x riferita all'oggetto (origine top-left)
      * @return Se il risultato è prossimo a zero vuol dire che lo scale factor corrisponde.
      */
-    public float calibrationTest(FloatBuffer inference, Pose objPose, Pose cameraPose, float rawX, float rawY){
+    public double calibrationTest(FloatBuffer inference, Pose objPose, Pose cameraPose, float rawX, float rawY){
         //L'origine XY è Top-left
         //Per effettuare le trasformazioni ho bisogno di coordinate normali
         float xFloat = rawX/surfaceWidth;
@@ -929,15 +938,15 @@ public class Calibrator {
         inference.rewind();
 
         //Ricavo la distanza.
-        float distance = getDistance(objPose, cameraPose);
+        double distance = getDistance(objPose, cameraPose);
         //Ricavo la distanza pydnet.
         float predictedDistance = inference.get(position);
 
-        float myScaleFactor = distance / predictedDistance;
+        double myScaleFactor = distance / predictedDistance;
 
-        float dFactor = myScaleFactor - scaleFactor;
+        double dFactor = myScaleFactor - scaleFactor;
 
-        return (float)Math.sqrt(dFactor*dFactor);
+        return Math.sqrt(dFactor*dFactor);
     }
 
 }

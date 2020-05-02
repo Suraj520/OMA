@@ -8,7 +8,6 @@ import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MotionEvent;
@@ -173,6 +172,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean maskEnabled = false;
     private boolean dualScreenMode = false;
     private boolean rainEnabled = false;
+
+    private double scaleFactorDifference = 0.0;
+    private double scaleFactorAverageDifference = 0.0;
+    private double scaleFactorDifferenceSum = 0.0;
+    private long scaleFactorDifferenceSumCounter = 0;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
@@ -530,8 +534,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         }
     }
 
-    @Override
-    public void onPause() {
+    public void onHandlerPause(){
         inferenceHandlerThread.quitSafely();
 
         try {
@@ -541,9 +544,13 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         } catch (final InterruptedException e) {
             Log.e(TAG, "Impossibile fermare handler pydnet", e);
         }
+    }
 
+    @Override
+    public void onPause() {
         super.onPause();
         onSessionPause();
+        onHandlerPause();
     }
 
     @Override
@@ -634,7 +641,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     //https://github.com/FilippoAleotti/mobilePydnet/
     protected synchronized void runInBackground(final Runnable r) {
-        //TODO: da spegnere quando vai in pausa
         if (inferenceHandler != null) {
             inferenceHandler.post(r);
         }
@@ -693,13 +699,13 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // Handle one tap per frame.
             handleTap(frame, camera);
 
-            planeRenderer.setScaleFactor(calibrator.getScaleFactor());
+            planeRenderer.setScaleFactor((float) calibrator.getScaleFactor());
             planeRenderer.setCameraPose(cameraPose);
 
-            virtualObject.setScaleFactor(calibrator.getScaleFactor());
+            virtualObject.setScaleFactor((float) calibrator.getScaleFactor());
             virtualObject.setCameraPose(cameraPose);
 
-            virtualObjectShadow.setScaleFactor(calibrator.getScaleFactor());
+            virtualObjectShadow.setScaleFactor((float) calibrator.getScaleFactor());
             virtualObjectShadow.setCameraPose(cameraPose);
 
             //Impostazione delle maschere
@@ -791,10 +797,15 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // Use try-with-resources to automatically release the point cloud.
             try (PointCloud pointCloud = frame.acquirePointCloud()) {
                 if(inference != null){
-//                    long nanos2 = SystemClock.elapsedRealtime();
-                    calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 5, 4, 2);
-//                    calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
-//                    Log.d(TAG, "calibrateScaleFactorRANSAC takes: " + (SystemClock.elapsedRealtime()-nanos2));
+                    if(calibrator.isLastTimestampDifferent(pointCloud)){
+                        double scaleFactorWeightedAverage = calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
+                        double scaleFactorRANSAC = calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 5, 4, 2);
+
+                        scaleFactorDifference = Math.abs(scaleFactorRANSAC-scaleFactorWeightedAverage);
+                        scaleFactorDifferenceSum += scaleFactorDifference;
+                        scaleFactorDifferenceSumCounter++;
+                        scaleFactorAverageDifference = scaleFactorDifferenceSum / scaleFactorDifferenceSumCounter;
+                    }
                 }
 
                 //Il numero visible points è indicativo, ci potrebbero essere più punti rispetto
@@ -810,6 +821,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             if (!hasTrackingPlane()) {
                 runOnUiThread(()->showLoadingMessage(R.string.searching_plane_message, Snackbar.LENGTH_INDEFINITE));
                 runOnUiThread(this::setNoLogMessage);
+
+                //Resetto il valore massimo di fattore di scala. La scena è cambiata
+                scaleFactorAverageDifference = 0.0;
             } else {
                 runOnUiThread(this::hideLoadingMessage);
             }
@@ -962,7 +976,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     }
 
     private void setGeneralLogMessage(int numPoints){
-        String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints, calibrator.getMinDistance(), calibrator.getMaxDistance(), planeRenderer.getUpperDelta(), planeRenderer.getLowerDelta(), virtualObject.getLowerDelta());
+        double scaleFactorDifferencePercent = (scaleFactorDifference / calibrator.getScaleFactor()) * 100;
+        double scaleFactorMaxDifferencePercent = (scaleFactorAverageDifference / calibrator.getScaleFactor()) * 100;
+
+        String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints, calibrator.getBestMSE() * 1000, scaleFactorDifference, scaleFactorDifferencePercent, scaleFactorAverageDifference, scaleFactorMaxDifferencePercent);
         logTextView.setText(text);
     }
 

@@ -17,7 +17,7 @@
     <string name="plane_finding">Searching for surfaces&#8230;</string>
 
     <string name="no_log_message">No log</string>
-    <string name="log_general">SF: %1$f. Punti nello schermo: %2$d. Distanze punti (min,max): (%3$f,%4$f) m PUD %5$f PLD %6$f OLD %7$f</string>
+    <string name="log_general">(SF: %1$f) (Punti nello schermo: %2$d) (MSE RANSACx1000: %3$f) (SF Difference: %4$f (%5$.2f %%)) (SF Avg Difference: %6$f (%7$.2f %%))</string>
 
     <string name="upperDeltaPlane">Upper delta plane:</string>
     <string name="lowerDeltaPlane">Lower delta plane:</string>
