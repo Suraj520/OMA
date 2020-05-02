@@ -12,9 +12,11 @@
 --output_arrays="PSD/resize_images_2/ResizeBilinear" \
 --input_arrays="im0" \
 --inference_type="QUANTIZED_UINT8" \
---default_ranges_min=0.0 \
---default_ranges_max=50.0 \
+--mean_values="0.0"
 --std_values="255.0"
+
+#--default_ranges_min=0.0 \
+#--default_ranges_max=50.0 \
 
 #Float16
 ./toco --input_file="/home/luca/Scrivania/OMA/optimizations/default/optimized_pydnet++.pb" \

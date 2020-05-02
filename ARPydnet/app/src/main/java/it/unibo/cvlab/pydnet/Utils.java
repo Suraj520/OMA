@@ -62,7 +62,8 @@ public class Utils {
         RES2(640,192),
         RES3(320,96),
         RES4(640,448),
-        RES5(640,384);
+        RES5(640,384),
+        RES_TEST(384,384);
 
         private final int width;
         private final int height;

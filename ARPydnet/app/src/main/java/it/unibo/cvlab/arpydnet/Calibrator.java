@@ -8,7 +8,12 @@ import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 
 import java.nio.FloatBuffer;
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Random;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import it.unibo.cvlab.Runner;
 import it.unibo.cvlab.pydnet.Utils;
@@ -20,7 +25,7 @@ public class Calibrator {
     private static final int BYTES_PER_FLOAT = Float.SIZE / 8;
     private static final int FLOATS_PER_POINT = 4; // X,Y,Z,confidence.
 
-    private static final int MAX_POINTS = 20;
+    private static final int MAX_POINTS = 250;
     private static final int MIN_POINTS = 1;
     private static final float MIN_SCALE_FACTOR = 0.001f;
     private static final int MIN_QUANTIZER_LEVELS = 2;
@@ -53,6 +58,8 @@ public class Calibrator {
     private int displayRotation;
     private int surfaceWidth, surfaceHeight;
 
+    private Random rnd = new Random();
+
     public void setCameraView(float[] cameraView) {
         this.cameraView = cameraView;
     }
@@ -72,6 +79,10 @@ public class Calibrator {
 
     private final float defaultScaleFactor;
     private float scaleFactor;
+
+    public void setScaleFactor(float scaleFactor) {
+        this.scaleFactor = scaleFactor;
+    }
 
     public float getScaleFactor(){
         return scaleFactor;
@@ -294,6 +305,312 @@ public class Calibrator {
         return scaleFactor;
     }
 
+    private static class RansacObject {
+        double scaleFactor;
+        float arConfidence;
+        double mse;
+
+        static Comparator<RansacObject> getComparatorByConfidence(){
+            return (a, b) -> {
+                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
+                if (a == null && b == null) {
+                    return 0;
+                }
+                if (a == null) {
+                    return 1;
+                }
+                if (b == null) {
+                    return -1;
+                }
+
+                return Float.compare(a.arConfidence, b.arConfidence);
+            };
+        }
+
+        static Comparator<RansacObject> getComparatorByError(){
+            return (a, b) -> {
+                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
+                if (a == null && b == null) {
+                    return 0;
+                }
+                if (a == null) {
+                    return 1;
+                }
+                if (b == null) {
+                    return -1;
+                }
+
+                return Double.compare(a.mse, b.mse);
+            };
+        }
+
+        static Comparator<RansacObject> getComparatorByConfidenceInverse(){
+            return (a, b) -> {
+                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
+                if (a == null && b == null) {
+                    return 0;
+                }
+                if (a == null) {
+                    return 1;
+                }
+                if (b == null) {
+                    return -1;
+                }
+
+                return Float.compare(b.arConfidence, a.arConfidence);
+            };
+        }
+
+        static Comparator<RansacObject> getComparatorByErrorInverse(){
+            return (a, b) -> {
+                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
+                if (a == null && b == null) {
+                    return 0;
+                }
+                if (a == null) {
+                    return 1;
+                }
+                if (b == null) {
+                    return -1;
+                }
+
+                return Double.compare(b.mse, a.mse);
+            };
+        }
+    }
+
+    public float calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud, Pose cameraPose, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
+        if(possibiliInlierDivider <= migliorConsensusSetDivider)
+            throw new IllegalArgumentException("divisori non validi");
+
+        if (cloud.getTimestamp() == lastTimestamp) {
+            // Redundant call.
+            return scaleFactor;
+        }
+
+        //Vettore con le World-Coords
+        //X,Y,Z,Confidence
+        float[] coords = new float[4];
+
+        //Vettore di prima dopo la View Projection Matrix.
+        //X,Y,Z,(A)
+        float[] projectionCoords = new float[4];
+
+        //Matrice usata per la trasformazione delle coordinate: world->view
+        float[] modelViewProjection = new float[16];
+        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
+
+        lastTimestamp = cloud.getTimestamp();
+
+        FloatBuffer points = cloud.getPoints();
+
+        int numPoints = getNumPoints(cloud);
+
+        //Check sul numero minimo di punti
+        if(numPoints < possibiliInlierDivider) return scaleFactor;
+
+        RansacObject[] ransacObjects = new RansacObject[numPoints];
+
+        //Calcolo di ogni singolo scaleFactor O(N)
+        for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
+            points.get(coords,0,4);
+
+            float arConfidence = coords[3];
+            coords[3] = 1.0f;
+
+            //Passaggio fondamentale: trasformazione delle coordinate.
+            Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
+
+            //Passaggio alle cordinate normali
+            projectionCoords[0] /= projectionCoords[3];
+            projectionCoords[1] /= projectionCoords[3];
+//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
+
+            //Clipping: se il punto è fuori dallo schermo non lo considero.
+            //Avrei potuto spostare sopra il clipping e verificare con w
+            if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
+                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
+                continue;
+            }
+
+            if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
+                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
+                continue;
+            }
+
+            //Viewport Transform
+            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
+            //Coordinate normalizzate(uv): [0.0,1.0]
+            //Origine in bottom-left.
+            //Seguo i fragment per la conversione.
+
+            float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
+            float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
+
+            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
+            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
+
+            //Trasformo le coordinate normalizate in [0,width[, [0.height[
+            int x = Math.round(finalCoords[0] * resolution.getWidth());
+            int y = Math.round(finalCoords[1] * resolution.getHeight());
+
+            int position = (resolution.getWidth() * y) + x;
+
+            inference.rewind();
+
+            if(inference.remaining() >= position){
+                //Ricavo la distanza.
+                double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
+
+                //Ricavo la distanza pydnet.
+                double predictedDistance = inference.get(position);
+                predictedDistance = 255.0f - predictedDistance;
+
+                ransacObjects[numVisiblePoints] = new RansacObject();
+                ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );
+                ransacObjects[numVisiblePoints].arConfidence = arConfidence;
+            }else{
+                //Stranamente non riesco a trovare la predizione.
+                Log.d(TAG, "Impossibile trovare predizione di calibrazione");
+                //Il punto è perso: ripeto con il prossimo.
+                numVisiblePoints--;
+            }
+        }
+
+        points.rewind();
+
+        //Sorting per confidenza, decrescente: O(N*log2(N))
+        //Non ho scelto parallel perché la lista degli elementi è limitata
+        Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
+
+        //Sorting usato solo per applicare lo sbarramento
+        //Applico sbarramento numero passimo punti
+        if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
+
+        //Algoritmo "RANSAC"
+        //Basato sullo pseudo-codice di https://it.wikipedia.org/wiki/RANSAC
+
+        //Aggiorno seed random
+        rnd.setSeed(lastTimestamp);
+
+        double migliorScaleFactor = Double.NaN; //ScaleFactor stimato da migliorConsensusSet
+        Integer[] migliorConsensusSet;              //Dati che rappresentano i migliori punti
+        double migliorMSE = Float.MAX_VALUE;    //Errore relativo ai punti di migliorConsensusSet
+
+        //Inizializzazione
+
+        //Punti contenuti in possibiliInlier
+        int puntiPerPossibiliInlier = numVisiblePoints / possibiliInlierDivider;
+
+        //Punti richiesti per fare un migliorConsensusSet
+        int puntiPerMigliorConsensusSet = numVisiblePoints / migliorConsensusSetDivider;
+
+        //Punti per consensusSet: range [puntiPerPossibiliInlier, numVisiblePoints]
+        int puntiConensusSet;
+
+        for (int i = 0; i < numberOfIterations; i++){
+            //possibiliInlier: Punti scelti a caso dal dataset
+            Integer[] possibiliInlier = new Integer[puntiPerPossibiliInlier];
+            //Ordino possibiliInlier: mi servirà dopo per scorrere i punti non presenti più velocemente
+            //Uso un set perché il rnd potrebbe darmi indici uguali
+            SortedSet<Integer> possibiliInlierSet = new TreeSet<>();
+            while(possibiliInlierSet.size() < puntiPerPossibiliInlier){
+                possibiliInlierSet.add(rnd.nextInt(numVisiblePoints));
+            }
+            possibiliInlier = possibiliInlierSet.toArray(possibiliInlier);
+
+            //Possibile scale factor stimato da possibiliInlier
+            double possibileScaleFactor;    //Candidato a diventare migliorScaleFactor
+            double sumScaleFactors = 0.0;   //Somma degli scale factor già pesati
+            double sumConfidence = 0.0;     //Somma dei pesi
+            for (int k = 0; k < puntiPerPossibiliInlier; k++){
+                RansacObject nextObj = ransacObjects[possibiliInlier[k]];
+                sumScaleFactors += nextObj.scaleFactor * nextObj.arConfidence;
+                sumConfidence += nextObj.arConfidence;
+            }
+            possibileScaleFactor = sumScaleFactors / sumConfidence;
+
+            //Alterazione dell'algoritmo: calcolo del valore di soglia per aggiungere un punto
+            //al consensusset: uso l'errore quadratico massimo presente in possibiliInlier
+
+            double maxSquareError = 0.0; //Errore Quadratico massimo presente in possibiliInlier
+
+            //Si potrebbe far pesare una possibile confidenza pydnet qui:
+            //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
+            double sumEstimationConfidence = 0.0;
+
+            for (int k = 0; k < puntiPerPossibiliInlier; k++){
+                RansacObject nextObj = ransacObjects[possibiliInlier[k]];
+                maxSquareError += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                sumEstimationConfidence +=1;
+            }
+            maxSquareError /= sumEstimationConfidence;
+
+            //consensusSet: Candidato a diventare migliorConsensusSet
+            //ConsensusSet inizializzato a possibiliInlier
+            Integer[] consensusSet = Arrays.copyOf(possibiliInlier, numVisiblePoints);
+            puntiConensusSet = puntiPerPossibiliInlier;
+
+            //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
+            for (int k = 0, j = 0; k < numVisiblePoints-puntiPerPossibiliInlier; k++){
+                if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
+                    //Punto presente in possibiliInlier: skip
+                    j++;
+                }
+
+                //Punto non presente: calcolo l'errore quadratico
+                RansacObject foreignObj = ransacObjects[k];
+
+                double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
+
+                //Se l'errore è minore di maxSquareError aggiungo il punto
+                if(squareError < maxSquareError){
+                    consensusSet[puntiConensusSet++] = k;
+
+                    //Aggiorno le somme, MA NON maxSquareError:
+                    sumScaleFactors += foreignObj.scaleFactor * foreignObj.arConfidence;
+                    sumConfidence += foreignObj.arConfidence;
+                }
+            }
+
+            //Se ho un numero sufficiente di punti allora il modello è buono
+            if(puntiConensusSet >= puntiPerMigliorConsensusSet){
+                //Ricalcolo possibleScaleFactor
+                possibileScaleFactor = sumScaleFactors / sumConfidence;
+
+                //Calcolo l'errore quadratico medio
+                double mse = 0.0;
+
+                //Si potrebbe far pesare una possibile confidenza pydnet qui:
+                //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
+                sumEstimationConfidence = 0.0;
+
+                for(int j = 0; j < puntiConensusSet; j++){
+                    RansacObject nextObj = ransacObjects[consensusSet[j]];
+                    mse += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                    sumEstimationConfidence +=1;
+                }
+                mse /= sumEstimationConfidence;
+
+                //Se l'errore è migliore allora consensusSet diventa migliorConsensusSet
+                if(mse < migliorMSE){
+                    migliorConsensusSet = consensusSet;
+                    migliorScaleFactor = possibileScaleFactor;
+                    migliorMSE = mse;
+                }
+            }
+        }
+
+        //Salvo il nuovo valore.
+        if(Double.isNaN(migliorScaleFactor)){
+            Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
+        }else{
+            scaleFactor = (float) migliorScaleFactor;
+        }
+
+        return scaleFactor;
+    }
+
     //https://www.learnopengles.com/tag/perspective-divide/
     //http://www.songho.ca/opengl/gl_transform.html
 
@@ -304,10 +621,10 @@ public class Calibrator {
      * @param cloud nuovola di punti di arcore
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public void calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose, ArrayList<CircularAnchor> anchors){
+    public float calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
         if (cloud.getTimestamp() == lastTimestamp) {
             // Redundant call.
-            return;
+            return scaleFactor;
         }
 
         //Vettore con le World-Coords
@@ -332,9 +649,9 @@ public class Calibrator {
 //        Log.d(TAG, "Num points: "+numPoints);
 
         //Ho un range di valori per cui accetto la nuvola.
-        if(numPoints < MIN_POINTS && anchors.isEmpty()) return;
+        if(numPoints < MIN_POINTS) return scaleFactor;
 
-        numPoints = numPoints > MAX_POINTS ? MAX_POINTS : numPoints;
+        numPoints = Math.min(numPoints, MAX_POINTS);
 
         float sumScaleFactor = 0;
         float sumWeight = 0;
@@ -344,9 +661,7 @@ public class Calibrator {
         float minDistance = Float.MAX_VALUE;
         float maxDistance = Float.MIN_VALUE;
 
-        int i = 0;
-
-        for (; i < numPoints && points.remaining() >= FLOATS_PER_POINT; i++){
+        for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
 
             float weight = coords[3];
@@ -363,14 +678,12 @@ public class Calibrator {
             //Clipping: se il punto è fuori dallo schermo non lo considero.
             //Avrei potuto spostare sopra il clipping e verificare con w
             if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
-                i--;    //Il punto non è valido: non lo conto e prendo il successivo
-                numVisiblePoints--;
+                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
                 continue;
             }
 
             if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
-                i--;    //Il punto non è valido: non lo conto e prendo il successivo
-                numVisiblePoints--;
+                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
                 continue;
             }
 
@@ -411,81 +724,8 @@ public class Calibrator {
                 if(maxPredictedDistance < predictedDistance) maxPredictedDistance = predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.w(TAG, "Impossibile trovare predizione di calibrazione");
-                i--;//Il punto è perso: ripeto con in prossimo.
-            }
-
-        }
-
-        //Introduzione delle ancore
-        if(anchors.size() > 0){
-            for(CircularAnchor circularAnchor : anchors){
-                Pose pose = circularAnchor.getAnchor().getPose();
-                pose.getTranslation(coords, 0);
-                coords[3] = 1.0f;
-
-                //Passaggio fondamentale: trasformazione delle coordinate.
-                Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
-
-                //Passaggio alle cordinate normali
-                projectionCoords[0] /= projectionCoords[3];
-                projectionCoords[1] /= projectionCoords[3];
-//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
-
-                //Clipping: se il punto è fuori dallo schermo non lo considero.
-                //Avrei potuto spostare sopra il clipping e verificare con w
-                if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
-                    continue;
-                }
-
-                if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
-                    continue;
-                }
-
-                //Viewport Transform
-                //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-                //Coordinate normalizzate(uv): [0.0,1.0]
-                //Origine in bottom-left.
-                //Seguo i fragment per la conversione.
-
-                float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
-                float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
-
-                //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-                float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-                //Trasformo le coordinate normalizate in [0,width[, [0.height[
-                int x = Math.round(finalCoords[0] * resolution.getWidth());
-                int y = Math.round(finalCoords[1] * resolution.getHeight());
-
-                int position = (resolution.getWidth() * y) + x;
-
-                inference.rewind();
-
-                if(inference.remaining() >= position){
-                    //Ricavo la distanza.
-                    float distance = getDistance(pose, cameraPose);
-                    //Ricavo la distanza pydnet.
-                    float predictedDistance = inference.get(position);
-                    predictedDistance = 255.0f - predictedDistance;
-//                    predictedDistance = (float) Math.exp(predictedDistance);
-
-                    //Faccio la somma: prendo una media PONDERATA dei punti.
-                    //Le ancore hanno un basso contributo:
-                    //A differenza del point cloud, le ancore potrebbero essere posizionate dietro
-                    //ad oggetti
-                    sumScaleFactor += (distance / predictedDistance) * 0.1f;
-                    sumWeight += 0.1f;
-
-                    if(minDistance > distance) minDistance = distance;
-                    if(maxDistance < distance) maxDistance = distance;
-                    if(minPredictedDistance > predictedDistance) minPredictedDistance = predictedDistance;
-                    if(maxPredictedDistance < predictedDistance) maxPredictedDistance = predictedDistance;
-                }else{
-                    //Stranamente non riesco a trovare la predizione.
-                    Log.w(TAG, "Impossibile trovare predizione di calibrazione Ancora");
-                }
-
+                Log.d(TAG, "Impossibile trovare predizione di calibrazione");
+                numVisiblePoints--;//Il punto è perso: ripeto con il prossimo.
             }
         }
 
@@ -506,6 +746,8 @@ public class Calibrator {
         this.maxPredictedDistance = maxPredictedDistance;
 
         points.rewind();
+
+        return scaleFactor;
     }
 
     public float getQuantizerFactor(){
@@ -547,7 +789,7 @@ public class Calibrator {
         inference.rewind();
 
         int inferenceLength = inference.remaining();
-        int length = Math.round(inferenceLength / numberThread);
+        int length = Math.round((float)inferenceLength / numberThread);
 
         for (int index = 0; index < numberThread; index++) {
             int current_start = index*length;

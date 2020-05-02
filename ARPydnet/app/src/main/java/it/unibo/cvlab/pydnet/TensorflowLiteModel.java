@@ -140,15 +140,15 @@ public class TensorflowLiteModel extends Model{
     protected Interpreter tfLite;
     private boolean isPrepared = false;
 
-    private ByteBuffer inputBackup;
     protected ByteBuffer input;
     protected ByteBuffer inputFake;
 
     protected ByteBuffer inference;
+    protected ByteBuffer inferenceFake;
 
 
-    public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint, float colorFactor, Utils.Resolution resolution){
-        super(context, generalModel, name, checkpoint, colorFactor, resolution);
+    public TensorflowLiteModel(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
+        super(context, generalModel, name, checkpoint);
 
         if(useNativeTfLite){
             try {
@@ -164,11 +164,11 @@ public class TensorflowLiteModel extends Model{
             Interpreter.Options tfliteOptions = new Interpreter.Options();
 
             //Opzioni di ottimizzazione: uso di Fp16 invece che Fp32, aumento il numero di threads
-//      tfliteOptions.setAllowFp16PrecisionForFp32(true);
-        tfliteOptions.setNumThreads(4);
+            //tfliteOptions.setAllowFp16PrecisionForFp32(true);
+            tfliteOptions.setNumThreads(4);
 
-//        addGPUDelegate(tfliteOptions);
-//        addNNAPIDelegate(tfliteOptions);
+            //addGPUDelegate(tfliteOptions);
+            addNNAPIDelegate(tfliteOptions);
 
             try {
                 MappedByteBuffer buffer = loadModelFile(context.getAssets(), checkpoint);
@@ -196,12 +196,11 @@ public class TensorflowLiteModel extends Model{
 
     /**
      * Prepara l'allocazione dei buffer per interagire con pydnet.
-     *
-     * @param resolution risoluzione dell'imagine da dare a pydnet: decisa a priori dal modello.
      */
     @Override
-    public void prepare(Utils.Resolution resolution) {
-        this.resolution = resolution;
+    public void prepare() {
+
+        Utils.Resolution resolution = getGeneralModel().getResolution();
 
         //RGB: per ogni canale un float (4 byte) il tutto va moltiplicato per il numero di pixel (W*H)
         input = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
@@ -209,10 +208,12 @@ public class TensorflowLiteModel extends Model{
 
         //Qui ho solo il canale di profondità: restituisce un float di distanza per ogni pixel.
         inference = ByteBuffer.allocateDirect(resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
+//        inferenceFake = ByteBuffer.allocateDirect(3 * resolution.getHeight() * resolution.getWidth() * DATA_SIZE);
 
         input.order(ByteOrder.nativeOrder());
 //        inputFake.order(ByteOrder.nativeOrder());
         inference.order(ByteOrder.nativeOrder());
+//        inferenceFake.order(ByteOrder.nativeOrder());
 
         isPrepared = true;
 
@@ -248,6 +249,7 @@ public class TensorflowLiteModel extends Model{
     }
 
     private void fillInputWithData(int[] data){
+        Utils.Resolution resolution = getGeneralModel().getResolution();
         // Convert the image to floating point.
         final int width = resolution.getWidth();
         final int height = resolution.getHeight();
@@ -269,11 +271,14 @@ public class TensorflowLiteModel extends Model{
         }
 
         // Convert the image to floating point.
+        Utils.Resolution resolution = getGeneralModel().getResolution();
         final int width = resolution.getWidth();
         final int height = resolution.getHeight();
 
         fillWithBuffer(data, width, height, input);
     }
+
+
 
     @NonNull
     public FloatBuffer doInference(Utils.Scale scale){
@@ -287,13 +292,16 @@ public class TensorflowLiteModel extends Model{
         }
 
         input.rewind();
+//        inputFake.rewind();
         inference.rewind();
+//        inferenceFake.rewind();
 
 //        Object[] inputArray = new Object[tfLite.getInputTensorCount()];
 //        inputArray[tfLite.getInputIndex(getInputNode("image"))] = input;
+//        inputArray[tfLite.getInputIndex(getInputNode("bias"))] = inputFake;
 //
 //        Map<Integer, Object> outputMap = new HashMap<>();
-//        outputMap.put(tfLite.getOutputIndex(outputNodes.get(scale)), inference);
+//        outputMap.put(tfLite.getOutputIndex(outputNodes.get(scale)), inferenceFake);
 //
 //        tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
 
@@ -311,14 +319,14 @@ public class TensorflowLiteModel extends Model{
         return inference;
     }
 
-    public void loadDirect(ByteBuffer input){
-        if(inputBackup == null) inputBackup = this.input;
+    @Override
+    public void loadInputDirect(ByteBuffer input){
         this.input = input;
     }
 
-    public void restore(){
-        if(inputBackup != null)
-            this.input = inputBackup;
+    @Override
+    public void loadInputDirectDuplicate(ByteBuffer input){
+        this.input = input.duplicate();
     }
 
     public void dispose(){

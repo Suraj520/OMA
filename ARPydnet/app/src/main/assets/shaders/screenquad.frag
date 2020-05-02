@@ -46,7 +46,8 @@ void main() {
         //Si tratta di una texture monodimensionale.
         vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
 
-        backgroundTextureColor.rgb = backgroundTextureColor.rgb * plasmaVector.rgb;
+        //backgroundTextureColor.rgb = backgroundTextureColor.rgb * plasmaVector.rgb;
+        backgroundTextureColor.rgb = plasmaVector.rgb;
     }
 
     gl_FragColor = backgroundTextureColor;

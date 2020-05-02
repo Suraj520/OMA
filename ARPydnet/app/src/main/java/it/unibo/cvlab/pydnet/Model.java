@@ -146,20 +146,16 @@ public abstract class Model{
     }
 
     private final String checkpoint;
-    private Map<Scale, String> outputNodes;
-    private ModelFactory.GeneralModel generalModel;
+    protected Map<Scale, String> outputNodes;
+    protected ModelFactory.GeneralModel generalModel;
     protected String name;
-    private HashMap<String, String> inputNodes;
-
-    private float colorFactor;
+    protected HashMap<String, String> inputNodes;
 
     protected boolean prepared;
 
     public boolean isPrepared(){
         return prepared;
     }
-
-    protected Resolution resolution;
 
     protected Runner[] pool;
 
@@ -172,9 +168,7 @@ public abstract class Model{
         }
     }
 
-    Model(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint, float colorFactor, Resolution resolution){
-        this.colorFactor = colorFactor;
-        this.resolution = resolution;
+    Model(Context context, ModelFactory.GeneralModel generalModel, String name, String checkpoint){
         this.prepared = false;
         this.generalModel = generalModel;
         this.name = name;
@@ -205,24 +199,19 @@ public abstract class Model{
         return name;
     }
 
-    public float getColorFactor() {
-        return colorFactor;
-    }
-
-    public Resolution getResolution() {
-        return resolution;
-    }
-
     public String getInputNode(String name){
         return this.inputNodes.get(name);
     }
 
-    public abstract void prepare(Utils.Resolution resolution);
+    public abstract void prepare();
 
     public abstract void loadInput(Bitmap input);
     public abstract void loadInput(int[] data);
     public abstract void loadInput(ByteBuffer data);
     public abstract void loadInput(IntBuffer data);
+
+    public abstract void loadInputDirect(ByteBuffer data);
+    public abstract void loadInputDirectDuplicate(ByteBuffer data);
 
     public abstract FloatBuffer doInference(Utils.Scale scale);
     public abstract ByteBuffer doRawInference(Utils.Scale scale);

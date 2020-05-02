@@ -59,15 +59,21 @@ public class ScreenshotRenderer {
     //Riferimento alle coordinate delle texture.
     private int texCoordAttribute;
 
-    private int[] textures = new int[1];
+    private int[] texturesExternal = new int[1];
 
     public void setSourceTextureId(int id){
-        textures[0] = id;
+        texturesExternal[0] = id;
     }
 
     private int getSourceTextureId(){
-        return textures[0];
+        return texturesExternal[0];
     }
+
+//    private int[] textures = new int[1];
+//
+//    private int getRenderTextureId(){
+//        return textures[0];
+//    }
 
     private int[] frameBuffers = new int[1];
 
@@ -122,6 +128,19 @@ public class ScreenshotRenderer {
 //        pixelData = new int[scaledHeight * scaledWidth];
 //        pixelDataBuffer = IntBuffer.wrap(pixelData);
 
+//        GLES30.glGenTextures(textures.length, textures, 0);
+//        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, getRenderTextureId());
+//        GLES30.glTexStorage2D(GLES30.GL_TEXTURE_2D, 1, GLES30.GL_RGB16F, scaledWidth, scaledHeight);
+//        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
+
+        int[] dataToRead = new int[2];
+
+//        GLES30.glGetIntegerv(GLES30.GL_IMPLEMENTATION_COLOR_READ_FORMAT, dataToRead, 0);
+//        GLES30.glGetIntegerv(GLES30.GL_IMPLEMENTATION_COLOR_READ_TYPE, dataToRead, 1);
+//
+//        Log.d(TAG, "GL_IMPLEMENTATION_COLOR_READ_FORMAT:"+dataToRead[0]);
+//        Log.d(TAG, "GL_IMPLEMENTATION_COLOR_READ_TYPE:"+dataToRead[1]);
+
         //Genero il renderbuffer dove salvare lo screenshot.
 
         GLES30.glGenRenderbuffers(renderBuffers.length, renderBuffers, 0);
@@ -136,6 +155,7 @@ public class ScreenshotRenderer {
         GLES30.glGenFramebuffers(frameBuffers.length, frameBuffers, 0);
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, getScreenshotFrameBuffer());
         GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, getScreenshotRenderBuffer());
+        //GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, getRenderTextureId(), 0);
 
         if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
             Log.d(TAG, "Framebuffer caricato correttamente");
@@ -285,8 +305,11 @@ public class ScreenshotRenderer {
         //https://stackoverflow.com/questions/29921348/safe-usage-of-glmapbufferrange-on-android-java
         if(rawBuffer != null){
             ByteBuffer byteBuffer = (ByteBuffer) rawBuffer;
-            model.loadInput(byteBuffer);
+            //model.loadInput(byteBuffer);
+            model.loadInputDirect(byteBuffer);
         }
+
+
 
         //Restoring
         GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
