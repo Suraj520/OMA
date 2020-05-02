@@ -11,6 +11,7 @@ import it.unibo.cvlab.computescene.model.Model;
 import it.unibo.cvlab.computescene.rendering.BackgroundRenderer;
 import it.unibo.cvlab.computescene.rendering.ObjectRenderer;
 import it.unibo.cvlab.computescene.rendering.ScreenshotRenderer;
+import it.unibo.cvlab.computescene.saver.MySaver;
 import org.lwjgl.*;
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.GL;
@@ -56,25 +57,21 @@ public class ComputeScene {
     private final Calibrator calibrator = new Calibrator();
 
     private DatasetLoader datasetLoader;
+    private MySaver saver;
     private Model model;
     private Obj obj;
     private BufferedImage texture;
 
-    private Session session;
     private float[] inferenceArray;
     private ScreenshotRenderer.ColorType colorType;
     private float objFactor;
     private float lowerDelta;
 
-    private Path depthPath;
-    private Path omaPath;
-
     private ColorMapper colorMapper;
 
-    public ComputeScene(DatasetLoader datasetLoader, Path depthPath, Path omaPath, Model model, Obj obj, BufferedImage texture, ScreenshotRenderer.ColorType colorType, float objFactor, float lowerDelta) {
+    public ComputeScene(DatasetLoader datasetLoader, MySaver saver, Model model, Obj obj, BufferedImage texture, ScreenshotRenderer.ColorType colorType, float objFactor, float lowerDelta) {
         this.datasetLoader = datasetLoader;
-        this.depthPath = depthPath;
-        this.omaPath = omaPath;
+        this.saver = saver;
         this.model = model;
         this.obj = obj;
         this.texture = texture;
@@ -96,8 +93,7 @@ public class ComputeScene {
         colorMapper.prepare(model.getOutputWidth(), model.getOutputHeight());
 
         //Inizializzo il modello
-        Graph graphDef = model.getGraphDef(model.getModelsPath());
-        session = new Session(graphDef);
+        model.loadGraph();
     }
 
     public void run()  {
@@ -258,18 +254,14 @@ public class ComputeScene {
             inputTensor = Tensor.create(Byte.class, model.getInputShapeLong(), byteBufferScreenshot);
         }
 
-        Session.Runner runner = session.runner();
-        runner = runner.feed(model.getDefaultInputNode(), inputTensor);
-        runner = runner.fetch(model.getDefaultOutputNode());
-        List<Tensor<?>> run = runner.run();
-        Tensor<?> outputTensor = run.get(0);
+        Tensor<?> outputTensor = model.run(inputTensor).get(0);
         FloatBuffer inference = FloatBuffer.wrap(inferenceArray);
         outputTensor.writeTo(inference);
         inputTensor.close();
         outputTensor.close();
 
         //Normalizzo se necessario
-        inference = Model.normalize(inference, model.getOutputNormalization());
+        inference = model.normalize(inference);
 
         calibrator.setCameraPerspective(sceneDataset.getProjmtx());
         calibrator.setCameraView(sceneDataset.getViewmtx());
@@ -277,9 +269,7 @@ public class ComputeScene {
 
         //Salvo il depth
         BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
-        OutputStream outputStreamDepth = Files.newOutputStream(depthPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-        ImageIO.write(colorMap, "jpg", outputStreamDepth);
-        outputStreamDepth.close();
+        saver.saveDepth(sceneDataset.getFrameNumber(), colorMap);
 
         objectRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
         objectRenderer.setMaskEnabled(true);
@@ -289,34 +279,20 @@ public class ComputeScene {
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
-        calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose());
+        //calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose());
+        calibrator.calibrateScaleFactorRANSAC(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose(), 10, 4, 2);
+
+        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", MSE: "+calibrator.getBestMSE()+", NP: "+calibrator.getNumVisiblePoints());
 
         for (Pose ancora : ancore){
-            objectRenderer.setScaleFactor(calibrator.getScaleFactor());
+            objectRenderer.setScaleFactor((float) calibrator.getScaleFactor());
             objectRenderer.updateModelMatrix(ancora.getModelMatrix());
             objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
         }
 
         //Salvo il rendering
         ByteBuffer pixelsBuffer = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
-        BufferedImage screenshot = new BufferedImage(surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB);
-        int bpp = screenshotRenderer.getColorType().getByteSize();
-
-        for(int x = 0; x < surfaceWidth; x++)
-        {
-            for(int y = 0; y < surfaceHeight; y++)
-            {
-                int i = (x + (surfaceWidth * y)) * bpp;
-                int r = pixelsBuffer.get(i) & 0xFF;
-                int g = pixelsBuffer.get(i + 1) & 0xFF;
-                int b = pixelsBuffer.get(i + 2) & 0xFF;
-                screenshot.setRGB(x, surfaceHeight - (y + 1), (0xFF << 24) | (r << 16) | (g << 8) | b);
-            }
-        }
-
-        OutputStream outputStreamScreenshot = Files.newOutputStream(omaPath.resolve(sceneDataset.getFrameNumber() + ".jpg"));
-        ImageIO.write(screenshot, "jpg", outputStreamScreenshot);
-        outputStreamScreenshot.close();
+        saver.saveOMA(sceneDataset.getFrameNumber(), pixelsBuffer, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
     }
 
     private static <T> T requestInput(T[] objs, BufferedReader inReader) throws IOException {
@@ -381,32 +357,12 @@ public class ComputeScene {
 
         DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
 
-        Path imagesPath = datasetLoader.getImagesPath();
-        Path scenesPath = datasetLoader.getScenesPath();
-        Path resultsPath = datasetLoader.getResultsPath();
-        Path pointsPath = datasetLoader.getPointsPath();
+        Path datasetPath = datasetLoader.getDatasetPath();
+        MySaver saver = new MySaver(datasetPath, model.getName());
+        saver.mkdir();
 
-        if(!Files.isDirectory(resultsPath))
-            Files.createDirectories(resultsPath);
-
-        Path depthPath = resultsPath.resolve(model.getName()).resolve("depth");
-
-        if(!Files.isDirectory(depthPath))
-            Files.createDirectories(depthPath);
-
-        Path omaPath = resultsPath.resolve(model.getName()).resolve("oma");
-
-        if(!Files.isDirectory(omaPath))
-            Files.createDirectories(omaPath);
-
-
-
-        System.out.println("Images path: "+imagesPath);
-        System.out.println("Scenes path: "+scenesPath);
-        System.out.println("Points path: "+pointsPath);
-        System.out.println("Results path: "+resultsPath);
-        System.out.println("Depth path: "+depthPath);
-        System.out.println("OMA path: "+omaPath);
+        datasetLoader.printPaths();
+        saver.printPaths();
 
         System.out.println("Numero frames: "+datasetLoader.getFrames());
 
@@ -418,7 +374,6 @@ public class ComputeScene {
         }
 
         Path objPath = requestInput(objPaths, inReader);
-//        Path objPath = objPaths[0];
         System.out.println(objPath);
         Obj obj = objectLoader.parseObj(objPath);
 
@@ -433,7 +388,6 @@ public class ComputeScene {
         }
 
         Path texturePath = requestInput(texturePaths, inReader);
-//        Path texturePath = texturePaths[0];
         System.out.println(texturePath);
 
         BufferedImage texture = objectLoader.getTexutre(texturePath);
@@ -483,7 +437,7 @@ public class ComputeScene {
 
         //Passo all'app datasetLoader, modello, oggetto e texture
 
-        computeScene = new ComputeScene(datasetLoader, depthPath, omaPath, model, obj, texture, colorType, objFactor, lowerDelta);
+        computeScene = new ComputeScene(datasetLoader, saver, model, obj, texture, colorType, objFactor, lowerDelta);
 
         System.out.println("Precaricamento...");
         computeScene.load();

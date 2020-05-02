@@ -27,7 +27,6 @@ public class DatasetLoader {
     private Path datasetPath;
     private Path imagesPath;
     private Path scenesPath;
-    private Path resultsPath;
     private Path pointsPath;
 
     private int frameCounter = 0;
@@ -45,7 +44,6 @@ public class DatasetLoader {
         this.datasetPath = datasetPath;
         this.imagesPath = this.datasetPath.resolve("images");
         this.scenesPath = this.datasetPath.resolve("scenes");
-        this.resultsPath = this.datasetPath.resolve("results");
         this.pointsPath = this.datasetPath.resolve("points");
 
         //Conta dei frame
@@ -57,11 +55,18 @@ public class DatasetLoader {
         }
     }
 
+    public void printPaths(){
+        System.out.println("Images path: "+imagesPath);
+        System.out.println("Scenes path: "+scenesPath);
+        System.out.println("Points path: "+pointsPath);
+    }
+
     public void next(){
         if(hasNext()){
             frameCounter++;
             image = null;
             sceneDataset = null;
+            pointDataset = null;
         }
     }
 
@@ -73,6 +78,7 @@ public class DatasetLoader {
         frameCounter = 0;
         image = null;
         sceneDataset = null;
+        pointDataset = null;
     }
 
     public Path getDatasetPath() {
@@ -85,10 +91,6 @@ public class DatasetLoader {
 
     public Path getScenesPath() {
         return scenesPath;
-    }
-
-    public Path getResultsPath() {
-        return resultsPath;
     }
 
     public Path getPointsPath() {

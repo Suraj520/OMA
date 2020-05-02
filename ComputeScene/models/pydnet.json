@@ -10,5 +10,9 @@
 	"outputShape":[1,448,640,1],
 	"outputType":"float32",
 	"outputNormalization":"none",
-	"plasmaFactor": 10.5
+	"plasmaFactor": 10.5,
+	"inputMin":0.0,
+	"inputMax":255.0,
+	"outputMin":0.0,
+	"outputMax":0.0
 }

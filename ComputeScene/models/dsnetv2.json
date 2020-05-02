@@ -11,4 +11,8 @@
 	"outputType":"float32",
 	"outputNormalization":"linearInverse",
 	"plasmaFactor": 255.0
+	"inputMin":0.0,
+	"inputMax":255.0,
+	"outputMin":0.0,
+	"outputMax":1.0
 }

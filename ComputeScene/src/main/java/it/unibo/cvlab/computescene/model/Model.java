@@ -3,11 +3,14 @@ package it.unibo.cvlab.computescene.model;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import org.tensorflow.Graph;
+import org.tensorflow.Session;
+import org.tensorflow.Tensor;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 public class Model {
@@ -57,30 +60,7 @@ public class Model {
         EXPONENTIAL_INVERSE,;
     }
 
-    public static FloatBuffer normalize(FloatBuffer in, Normalization type){
-        if(type == null) type = Normalization.NONE;
-
-        switch (type){
-            case NONE:
-                return in;
-            case INVERSE:
-                return inverse(in);
-            case LINEAR:
-                return linearNormalization(in);
-            case LINEAR_INVERSE:
-                return inverseLinearNormalization(in);
-            case EXPONENTIAL:
-                return  expNormalization(in);
-            case EXPONENTIAL_INVERSE:
-                return inverseExpNormalization(in);
-            default:
-                throw new IllegalArgumentException("Normalizzazione non riconosciuta");
-        }
-    }
-
-    public static FloatBuffer inverse(FloatBuffer in){
-        FloatBuffer out = FloatBuffer.allocate(in.capacity());
-
+    public static float[] getMinMaxOfBuffer(FloatBuffer in){
         in.rewind();
 
         float maxPred = Float.MIN_VALUE;
@@ -92,13 +72,26 @@ public class Model {
             if(minPred > pred) minPred = pred;
         }
 
-        float range = maxPred - minPred;
+        in.rewind();
+
+        return new float[]{minPred, maxPred};
+    }
+
+    public static FloatBuffer inverse(FloatBuffer in){
+        float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
+        return inverse(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+    }
+
+    public static FloatBuffer inverse(FloatBuffer in, float min, float max){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        float range = max - min;
 
         in.rewind();
 
         while(in.hasRemaining()){
             float pred = in.get();
-            out.put(range * (1f-((pred-minPred)/range)));
+            out.put(range * (1f-((pred-min)/range)));
         }
 
         in.rewind();
@@ -108,26 +101,18 @@ public class Model {
     }
 
     public static FloatBuffer linearNormalization(FloatBuffer in){
+        float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
+        return linearNormalization(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+    }
+
+    public static FloatBuffer linearNormalization(FloatBuffer in, float min, float max){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
-        in.rewind();
-
-        float maxPred = Float.MIN_VALUE;
-        float minPred = Float.MAX_VALUE;
+        float range = max - min;
 
         while(in.hasRemaining()){
             float pred = in.get();
-            if(maxPred < pred) maxPred = pred;
-            if(minPred > pred) minPred = pred;
-        }
-
-        float range = maxPred - minPred;
-
-        in.rewind();
-
-        while(in.hasRemaining()){
-            float pred = in.get();
-            out.put((pred-minPred)/range);
+            out.put((pred-min)/range);
         }
 
         in.rewind();
@@ -137,26 +122,20 @@ public class Model {
     }
 
     public static FloatBuffer inverseLinearNormalization(FloatBuffer in){
+        float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
+        return inverseLinearNormalization(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+    }
+
+    public static FloatBuffer inverseLinearNormalization(FloatBuffer in, float min, float max){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
-        in.rewind();
-
-        float maxPred = Float.MIN_VALUE;
-        float minPred = Float.MAX_VALUE;
-
-        while(in.hasRemaining()){
-            float pred = in.get();
-            if(maxPred < pred) maxPred = pred;
-            if(minPred > pred) minPred = pred;
-        }
-
-        float range = maxPred - minPred;
+        float range = max - min;
 
         in.rewind();
 
         while(in.hasRemaining()){
             float pred = in.get();
-            out.put(1f-((pred-minPred)/range));
+            out.put(1f-((pred-min)/range));
         }
 
         in.rewind();
@@ -260,6 +239,13 @@ public class Model {
     @SerializedName("inputType")
     private Type inputType;
 
+    @Expose
+    @SerializedName("inputMin")
+    private float inputMin;
+    @Expose
+    @SerializedName("inputMax")
+    private float inputMax;
+
     //Tipicamente [1,448,640,1]
     @Expose
     @SerializedName("outputShape")
@@ -273,6 +259,13 @@ public class Model {
     @Expose
     @SerializedName("outputNormalization")
     private Normalization outputNormalization;
+
+    @Expose
+    @SerializedName("outputMin")
+    private float outputMin;
+    @Expose
+    @SerializedName("outputMax")
+    private float outputMax;
 
     @Expose
     @SerializedName("plasmaFactor")
@@ -289,7 +282,13 @@ public class Model {
         this.modelsPath = modelsPath;
     }
 
-    public Model(String name, String fileName, Set<String> inputNodes, Set<String> outputNodes, String defaultInputNode, String defaultOutputNode, int[] inputShape, Type inputType, int[] outputShape, Type outputType, Normalization outputNormalization) {
+    private Session session;
+
+
+
+    public Model(String name, String fileName, Set<String> inputNodes, Set<String> outputNodes, String defaultInputNode,
+                 String defaultOutputNode, int[] inputShape, Type inputType, float inputMin, float inputMax,
+                 int[] outputShape, Type outputType, Normalization outputNormalization, float outputMin, float outputMax) {
         this.name = name;
         this.fileName = fileName;
         this.inputNodes = inputNodes;
@@ -298,9 +297,25 @@ public class Model {
         this.defaultOutputNode = defaultOutputNode;
         this.inputShape = inputShape;
         this.inputType = inputType;
+        this.inputMin = inputMin;
+        this.inputMax = inputMax;
         this.outputShape = outputShape;
         this.outputType = outputType;
         this.outputNormalization = outputNormalization;
+        this.outputMin = outputMin;
+        this.outputMax = outputMax;
+    }
+
+    public void loadGraph() throws IOException {
+        Graph graphDef = getGraphDef(getModelsPath());
+        session = new Session(graphDef);
+    }
+
+    public List<Tensor<?>> run(Tensor<?> inputTensor){
+        Session.Runner runner = session.runner();
+        runner = runner.feed(getDefaultInputNode(), inputTensor);
+        runner = runner.fetch(getDefaultOutputNode());
+        return runner.run();
     }
 
     public void addOutputNodes(String node){
@@ -423,6 +438,59 @@ public class Model {
 
     public float getPlasmaFactor() {
         return plasmaFactor;
+    }
+
+    public float getInputMin() {
+        return inputMin;
+    }
+
+    public float getInputMax() {
+        return inputMax;
+    }
+
+    public float getOutputMin() {
+        return outputMin;
+    }
+
+    public float getOutputMax() {
+        return outputMax;
+    }
+
+    public boolean isInputMinMaxValid(){
+        return inputMin < inputMax;
+    }
+
+    public boolean isOutputMinMaxValid(){
+        return outputMin < outputMax;
+    }
+
+    public FloatBuffer normalize(FloatBuffer in){
+        Normalization type = getOutputNormalization();
+
+        if(type == null) type = Normalization.NONE;
+
+        switch (type){
+            case NONE:
+                return in;
+            case INVERSE:
+                if(isOutputMinMaxValid())
+                    return inverse(in, getOutputMin(), getOutputMax());
+                return inverse(in);
+            case LINEAR:
+                if(isOutputMinMaxValid())
+                    return linearNormalization(in, getOutputMin(), getOutputMax());
+                return linearNormalization(in);
+            case LINEAR_INVERSE:
+                if(isOutputMinMaxValid())
+                    return inverseLinearNormalization(in, getOutputMin(), getOutputMax());
+                return inverseLinearNormalization(in);
+            case EXPONENTIAL:
+                return  expNormalization(in);
+            case EXPONENTIAL_INVERSE:
+                return inverseExpNormalization(in);
+            default:
+                throw new IllegalArgumentException("Normalizzazione non riconosciuta");
+        }
     }
 
 }

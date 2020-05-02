@@ -499,7 +499,7 @@ public class Calibrator {
         //Basato sullo pseudo-codice di https://it.wikipedia.org/wiki/RANSAC
 
         //Aggiorno seed random
-        rnd.setSeed(lastTimestamp);
+        //rnd.setSeed(lastTimestamp);
 
         double migliorScaleFactor = Double.NaN; //ScaleFactor stimato da migliorConsensusSet
         Integer[] migliorConsensusSet;              //Dati che rappresentano i migliori punti
