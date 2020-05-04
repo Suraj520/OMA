@@ -2,7 +2,7 @@ package it.unibo.cvlab.computescene.dataset;
 
 import com.google.gson.annotations.Expose;
 
-public class Point {
+public class Point implements ITraslation {
 
     @Expose
     private int x;
@@ -39,14 +39,17 @@ public class Point {
         return y;
     }
 
+    @Override
     public float getTx() {
         return tx;
     }
 
+    @Override
     public float getTy() {
         return ty;
     }
 
+    @Override
     public float getTz() {
         return tz;
     }

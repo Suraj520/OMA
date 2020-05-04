@@ -2,7 +2,7 @@ package it.unibo.cvlab.computescene.dataset;
 
 import com.google.gson.annotations.Expose;
 
-public class Pose {
+public class Pose implements ITraslation{
 
     @Expose
     private float tx;
@@ -40,14 +40,17 @@ public class Pose {
         this.modelViewProjectionMatrix = modelViewProjectionMatrix;
     }
 
+    @Override
     public float getTx() {
         return tx;
     }
 
+    @Override
     public float getTy() {
         return ty;
     }
 
+    @Override
     public float getTz() {
         return tz;
     }

@@ -237,8 +237,8 @@ public class Calibrator {
         float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * resolution.getWidth());
-        int y = Math.round(finalCoords[1] * resolution.getHeight());
+        int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+        int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
         int position = (resolution.getWidth() * y) + x;
 
@@ -280,8 +280,8 @@ public class Calibrator {
         float[] finalCoords = transformCoordTopLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * resolution.getWidth());
-        int y = Math.round(finalCoords[1] * resolution.getHeight());
+        int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+        int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
         int position = (resolution.getWidth() * y) + x;
 
@@ -457,8 +457,8 @@ public class Calibrator {
             float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
 
             //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * resolution.getWidth());
-            int y = Math.round(finalCoords[1] * resolution.getHeight());
+            int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+            int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
             int position = (resolution.getWidth() * y) + x;
 
@@ -707,8 +707,8 @@ public class Calibrator {
             float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
 
             //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * resolution.getWidth());
-            int y = Math.round(finalCoords[1] * resolution.getHeight());
+            int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+            int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
             int position = (resolution.getWidth() * y) + x;
 
@@ -929,8 +929,8 @@ public class Calibrator {
         float[] finalCoords = transformCoordTopLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * resolution.getWidth());
-        int y = Math.round(finalCoords[1] * resolution.getHeight());
+        int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+        int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
         Log.d(TAG, "Calibration Test XY: "+x+", "+y);
 

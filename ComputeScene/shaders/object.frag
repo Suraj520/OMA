@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-precision highp float;
+#ifdef GL_ES
+precision mediump float;
+#endif
 
 uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;
@@ -39,14 +41,14 @@ void main() {
         vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
 
         //Sistema opengl: origine in bottom left.
-        //Sistema coordinate pydnet: origine in top-left
+        //Sistema coordinate predizione: origine in top-left
 
         //Inverto solo y
         texcoord = vec2(texcoord.x, 1.0-texcoord.y);
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
         /*float pydnetDistance = exp(inferenceVector.r) * u_scaleFactor;*/
-        float pydnetDistance = inferenceVector.r * u_scaleFactor;
+        float predictedDistance = inferenceVector.r * u_scaleFactor;
 
         float dx = u_cameraPose.x-v_worldPos.x;
         float dy = u_cameraPose.y-v_worldPos.y;
@@ -54,7 +56,7 @@ void main() {
 
         float distance = sqrt(dx*dx+dy*dy+dz*dz);
 
-        if(distance > pydnetDistance + u_lowerDelta){
+        if(distance > predictedDistance + u_lowerDelta){
             discard;
         }
     }
@@ -64,7 +66,7 @@ void main() {
 
     // Flip the y-texture coordinate to address the texture from top-left.
     vec4 tmp = texture2D(u_texture, vec2(v_texCoord.x, 1.0 - v_texCoord.y));
-    vec4 objectColor = vec4(tmp.b, tmp.g, tmp.r, 1.0);
+    vec4 objectColor = vec4(tmp.r, tmp.g, tmp.b, 1.0);
 
     // Apply color to grayscale image only if the alpha of u_ObjColor is
     // greater and equal to 255.0.

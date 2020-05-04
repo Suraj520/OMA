@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import it.unibo.cvlab.computescene.dataset.ITraslation;
 import it.unibo.cvlab.computescene.dataset.Point;
 import it.unibo.cvlab.computescene.dataset.Pose;
 
@@ -17,27 +18,25 @@ public class Calibrator {
 
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
 
-    private static float getDistance(Point point, Pose cameraPose){
-        float dx = cameraPose.getTx() - point.getTx();
-        float dy = cameraPose.getTy() - point.getTy();
-        float dz = cameraPose.getTz() - point.getTz();
-
-        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
-    }
-
-    private static float getDistance(float x, float y, float z, Pose cameraPose){
-        float dx = cameraPose.getTx() - x;
-        float dy = cameraPose.getTy() - y;
-        float dz = cameraPose.getTz() - z;
-
-        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
-    }
-
     Random rnd = new Random();
 
+    private int width, height;
+    private Pose cameraPose;
     private float[] cameraView;
     private float[] cameraPerspective;
     private int displayRotation;
+
+    public void setWidth(int width) {
+        this.width = width;
+    }
+
+    public void setHeight(int height) {
+        this.height = height;
+    }
+
+    public void setCameraPose(Pose cameraPose) {
+        this.cameraPose = cameraPose;
+    }
 
     public void setCameraView(float[] cameraView) {
         this.cameraView = cameraView;
@@ -141,20 +140,28 @@ public class Calibrator {
         return new float[]{xFloat, yFloat};
     }
 
-    //https://learnopengl.com/Getting-started/Coordinate-Systems
+    private float getDistance(Point point){
+        float dx = cameraPose.getTx() - point.getTx();
+        float dy = cameraPose.getTy() - point.getTy();
+        float dz = cameraPose.getTz() - point.getTz();
+
+        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    private float getDistance(float x, float y, float z){
+        float dx = cameraPose.getTx() - x;
+        float dy = cameraPose.getTy() - y;
+        float dz = cameraPose.getTz() - z;
+
+        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
 
     /**
-     * Calibra lo scale factor da un solo punto di osservazione.
-     * @param inference risultato della pydnet
-     * @param points lista dei punti dell'oggetto
-     * @param cameraPose Punto della camera in riferimento alla nuvola di punti
+     * Effettua le trasformazioni OpenGL per ricavare le coordinate XY di un punto nelle coordinate world-space.
+     * @param point punto nelle coordinate world-space
+     * @return int[] array con le coordinate XY (X:0, Y:1), NULL nel caso di punto fuori schermo
      */
-    public double calibrateScaleFactor(FloatBuffer inference, int width, int height, Point[] points, Pose cameraPose){
-        double sumScaleFactor = 0.0;
-        double sumWeight = 0.0;
-
-        numVisiblePoints = 0;
-
+    public int[] getXYFromPoint(ITraslation point){
         //Matrice usata per la trasformazione delle coordinate: world->view
         float[] viewProjectionMatrix = new float[16];
         Matrix.multiplyMM(viewProjectionMatrix, 0, cameraPerspective, 0, cameraView, 0);
@@ -162,61 +169,84 @@ public class Calibrator {
         float[] coords = new float[4];
         float[] projCoords = new float[4];
 
+        //Estrazione coordinate dal punto
+        coords[0] = point.getTx();
+        coords[1] = point.getTy();
+        coords[2] = point.getTz();
+        coords[3] = 1.0f;
+
+        //Passaggio fondamentale: trasformazione delle coordinate.
+        Matrix.multiplyMV(projCoords, 0, viewProjectionMatrix,0, coords,0);
+
+        //Passaggio alle cordinate normali
+        projCoords[0] /= projCoords[3];
+        projCoords[1] /= projCoords[3];
+
+        //Clipping: se il punto è fuori dallo schermo non lo considero.
+        if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
+            //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
+            return null;
+        }
+
+        if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
+            //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
+            return null;
+        }
+
+        //Viewport Transform
+        //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
+        //Coordinate normalizzate(uv): [0.0,1.0]
+        //Origine in bottom-left.
+        //Seguo i fragment per la conversione.
+        float xFloat = (projCoords[0] * 0.5f) + 0.5f;
+        float yFloat = (projCoords[1] * 0.5f) + 0.5f;
+
+        //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
+        float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
+
+        //Trasformo le coordinate normalizate in [0,width[, [0.height[
+        int x = Math.round(finalCoords[0] * (width-1));
+        int y = Math.round(finalCoords[1] * (height-1));
+
+        return new int[]{x,y};
+    }
+
+    //https://learnopengl.com/Getting-started/Coordinate-Systems
+
+    /**
+     * Calibra lo scale factor da un solo punto di osservazione.
+     * @param inference risultato della pydnet
+     * @param points lista dei punti dell'oggetto
+     */
+    public double calibrateScaleFactor(FloatBuffer inference, Point[] points){
+        double sumScaleFactor = 0.0;
+        double sumWeight = 0.0;
+
+        numVisiblePoints = 0;
+
         for(Point point : points){
             if(point == null) continue;
 
-            //Estrazione coordinate dal punto
-            coords[0] = point.getTx();
-            coords[1] = point.getTy();
-            coords[2] = point.getTz();
-            coords[3] = 1.0f;
+            int[] coords = getXYFromPoint(point);
 
-            //Passaggio fondamentale: trasformazione delle coordinate.
-            Matrix.multiplyMV(projCoords, 0, viewProjectionMatrix,0, coords,0);
-
-            //Passaggio alle cordinate normali
-            projCoords[0] /= projCoords[3];
-            projCoords[1] /= projCoords[3];
-
-            //Clipping: se il punto è fuori dallo schermo non lo considero.
-            if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
-                //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
+            if(coords == null){
+                //Punto non valido continuo con il prossimo
                 continue;
             }
 
-            if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
-                //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
-                continue;
-            }
-
-            //Viewport Transform
-            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-            //Coordinate normalizzate(uv): [0.0,1.0]
-            //Origine in bottom-left.
-            //Seguo i fragment per la conversione.
-            float xFloat = (projCoords[0] * 0.5f) + 0.5f;
-            float yFloat = (projCoords[1] * 0.5f) + 0.5f;
-
-            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-            //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * width);
-            int y = Math.round(finalCoords[1] * height);
-
-            int position = (width * y) + x;
+            int position = (width * coords[1]) + coords[0];
 
             inference.rewind();
 
             if(inference.remaining() >= position){
                 float predictedDistance = inference.get(position);
-                sumScaleFactor += (getDistance(point, cameraPose) / predictedDistance) * point.getConfidence();
+                sumScaleFactor += (getDistance(point) / predictedDistance) * point.getConfidence();
                 sumWeight += point.getConfidence();
 
                 numVisiblePoints++;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.log(Level.WARNING, "Impossibile trovare predizione di calibrazione");
+                Log.log(Level.INFO, "Impossibile trovare predizione di calibrazione");
             }
         }
 
@@ -312,29 +342,16 @@ public class Calibrator {
      * Dovrebbe essere più robusto rispetto al calcolo tramite media
      *
      * @param inference stima di profondità
-     * @param cameraPose posa della camera per il calcolo della distanza
      * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
      * @param possibiliInlierDivider divisore del numero di punti inlier: indica la dimensione del set di possibili inlier
      * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set: indica la dimensione minima del miglior consensus set.
      * @return fattore di scala trovato tramite RANSAC
      */
-    public double calibrateScaleFactorRANSAC(FloatBuffer inference, int width, int height, Point[] points, Pose cameraPose, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
+    public double calibrateScaleFactorRANSAC(FloatBuffer inference, Point[] points, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
         if(possibiliInlierDivider <= migliorConsensusSetDivider)
             throw new IllegalArgumentException("divisori non validi");
 
         numVisiblePoints = 0;
-
-        //Vettore con le World-Coords
-        //X,Y,Z,Confidence
-        float[] coords = new float[4];
-
-        //Vettore di prima dopo la View Projection Matrix.
-        //X,Y,Z,(A)
-        float[] projectionCoords = new float[4];
-
-        //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
 
         int numPoints = points.length;
 
@@ -343,62 +360,27 @@ public class Calibrator {
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
-        float myMaxPredictedDistance = Float.MIN_VALUE;
-
         //Calcolo di ogni singolo scaleFactor O(N)
         for (Point point : points){
             if(point == null) continue;
 
-            coords[0] = point.getTx();
-            coords[1] = point.getTy();
-            coords[2] = point.getTz();
-            coords[3] = 1.0f;
+            int[] coords = getXYFromPoint(point);
 
-            //Passaggio fondamentale: trasformazione delle coordinate.
-            Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
-
-            //Passaggio alle cordinate normali
-            projectionCoords[0] /= projectionCoords[3];
-            projectionCoords[1] /= projectionCoords[3];
-//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
-
-            //Clipping: se il punto è fuori dallo schermo non lo considero.
-            //Avrei potuto spostare sopra il clipping e verificare con w
-            if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
+            if(coords == null){
+                //Punto non valido continuo con il prossimo
                 continue;
             }
 
-            if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
-                continue;
-            }
-
-            //Viewport Transform
-            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-            //Coordinate normalizzate(uv): [0.0,1.0]
-            //Origine in bottom-left.
-            //Seguo i fragment per la conversione.
-
-            float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
-            float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
-
-            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-            //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * width);
-            int y = Math.round(finalCoords[1] * height);
-
-            int position = (width * y) + x;
+            int position = (width * coords[1]) + coords[0];
 
             inference.rewind();
 
             if(inference.remaining() >= position){
                 //Ricavo la distanza.
-                double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
+                double distance = getDistance(point);
 
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
-                predictedDistance = 255.0f - predictedDistance;
 
                 ransacObjects[numVisiblePoints] = new RansacObject();
                 ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );

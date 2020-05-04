@@ -329,8 +329,7 @@ public class ObjectRenderer {
         GL30.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
         GL30.glDrawElements(GL30.GL_TRIANGLES, indexCount, GL30.GL_UNSIGNED_SHORT, 0);
         GL30.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, 0);
-
-
+        
         // Disable vertex arrays
         GL30.glDisableVertexAttribArray(positionAttribute);
         GL30.glDisableVertexAttribArray(texCoordAttribute);

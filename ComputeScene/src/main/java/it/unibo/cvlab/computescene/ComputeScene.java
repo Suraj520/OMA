@@ -12,28 +12,25 @@ import it.unibo.cvlab.computescene.rendering.BackgroundRenderer;
 import it.unibo.cvlab.computescene.rendering.ObjectRenderer;
 import it.unibo.cvlab.computescene.rendering.ScreenshotRenderer;
 import it.unibo.cvlab.computescene.saver.MySaver;
-import org.lwjgl.*;
-import org.lwjgl.glfw.*;
+import org.lwjgl.Version;
+import org.lwjgl.glfw.Callbacks;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL30;
-import org.lwjgl.system.*;
-import org.tensorflow.Graph;
-import org.tensorflow.Session;
+import org.lwjgl.system.MemoryStack;
 import org.tensorflow.Tensor;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -263,6 +260,9 @@ public class ComputeScene {
         //Normalizzo se necessario
         inference = model.normalize(inference);
 
+        calibrator.setCameraPose(sceneDataset.getCameraPose());
+        calibrator.setWidth(model.getOutputWidth());
+        calibrator.setHeight(model.getOutputHeight());
         calibrator.setCameraPerspective(sceneDataset.getProjmtx());
         calibrator.setCameraView(sceneDataset.getViewmtx());
         calibrator.setDisplayRotation(90);//Devo settarla di default perchè qui lo schermo non ruota.
@@ -273,14 +273,14 @@ public class ComputeScene {
 
         objectRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
         objectRenderer.setMaskEnabled(true);
-        objectRenderer.setObjScaleFactor(0.5f);
+        objectRenderer.setObjScaleFactor(objFactor);
 
         //Faccio il rendering degli oggetti.
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
-        //calibrator.calibrateScaleFactor(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose());
-        calibrator.calibrateScaleFactorRANSAC(inference, model.getOutputWidth(), model.getOutputHeight(), pointDataset.getPoints(), sceneDataset.getCameraPose(), 10, 4, 2);
+        //calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+        calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 4, 2);
 
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", MSE: "+calibrator.getBestMSE()+", NP: "+calibrator.getNumVisiblePoints());
 
