@@ -48,6 +48,8 @@ public class Model {
     public enum Normalization{
         @SerializedName("none")
         NONE,
+        @SerializedName("negate")
+        NEGATE,
         @SerializedName("inverse")
         INVERSE,
         @SerializedName("linear")
@@ -55,9 +57,9 @@ public class Model {
         @SerializedName("exp")
         EXPONENTIAL,
         @SerializedName("linearInverse")
-        LINEAR_INVERSE,
+        LINEAR_NEGATE,
         @SerializedName("expInverse")
-        EXPONENTIAL_INVERSE,;
+        EXPONENTIAL_NEGATE,;
     }
 
     public static float[] getMinMaxOfBuffer(FloatBuffer in){
@@ -79,10 +81,32 @@ public class Model {
 
     public static FloatBuffer inverse(FloatBuffer in){
         float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
-        return inverse(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+        return inverse(in, minMaxOfBuffer[1]);
     }
 
-    public static FloatBuffer inverse(FloatBuffer in, float min, float max){
+    public static FloatBuffer inverse(FloatBuffer in,  float max){
+        FloatBuffer out = FloatBuffer.allocate(in.capacity());
+
+        in.rewind();
+
+        while(in.hasRemaining()){
+            float pred = in.get();
+            pred = pred / max;
+            out.put(1.0f/pred);
+        }
+
+        in.rewind();
+        out.rewind();
+
+        return out;
+    }
+
+    public static FloatBuffer negate(FloatBuffer in){
+        float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
+        return negate(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+    }
+
+    public static FloatBuffer negate(FloatBuffer in, float min, float max){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
         float range = max - min;
@@ -121,12 +145,12 @@ public class Model {
         return out;
     }
 
-    public static FloatBuffer inverseLinearNormalization(FloatBuffer in){
+    public static FloatBuffer negateLinearNormalization(FloatBuffer in){
         float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
-        return inverseLinearNormalization(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
+        return negateLinearNormalization(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
     }
 
-    public static FloatBuffer inverseLinearNormalization(FloatBuffer in, float min, float max){
+    public static FloatBuffer negateLinearNormalization(FloatBuffer in, float min, float max){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
         float range = max - min;
@@ -175,7 +199,7 @@ public class Model {
         return out;
     }
 
-    public static FloatBuffer inverseExpNormalization(FloatBuffer in){
+    public static FloatBuffer negateExpNormalization(FloatBuffer in){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
         in.rewind();
@@ -474,20 +498,24 @@ public class Model {
                 return in;
             case INVERSE:
                 if(isOutputMinMaxValid())
-                    return inverse(in, getOutputMin(), getOutputMax());
+                    return inverse(in, getOutputMax());
                 return inverse(in);
+            case NEGATE:
+                if(isOutputMinMaxValid())
+                    return negate(in, getOutputMin(), getOutputMax());
+                return negate(in);
             case LINEAR:
                 if(isOutputMinMaxValid())
                     return linearNormalization(in, getOutputMin(), getOutputMax());
                 return linearNormalization(in);
-            case LINEAR_INVERSE:
+            case LINEAR_NEGATE:
                 if(isOutputMinMaxValid())
-                    return inverseLinearNormalization(in, getOutputMin(), getOutputMax());
-                return inverseLinearNormalization(in);
+                    return negateLinearNormalization(in, getOutputMin(), getOutputMax());
+                return negateLinearNormalization(in);
             case EXPONENTIAL:
                 return  expNormalization(in);
-            case EXPONENTIAL_INVERSE:
-                return inverseExpNormalization(in);
+            case EXPONENTIAL_NEGATE:
+                return negateExpNormalization(in);
             default:
                 throw new IllegalArgumentException("Normalizzazione non riconosciuta");
         }

@@ -259,6 +259,7 @@ public class ComputeScene {
 
         //Normalizzo se necessario
         inference = model.normalize(inference);
+        inferenceArray = inference.array();
 
         calibrator.setCameraPose(sceneDataset.getCameraPose());
         calibrator.setWidth(model.getOutputWidth());
