@@ -30,7 +30,7 @@ public class Calibrator {
     private static final int MAX_QUANTIZER_LEVELS = 256;
     private static final int MAX_QUANTIZER_MASK = 0xFF;
 
-    public static int getNumPoints(PointCloud pointCloud){
+    private static int getNumPoints(PointCloud pointCloud){
         FloatBuffer pointsBuffer = pointCloud.getPoints();
         return pointsBuffer.remaining() / FLOATS_PER_POINT;
     }
@@ -99,6 +99,11 @@ public class Calibrator {
     public int getNumVisiblePoints() {
         return numVisiblePoints;
     }
+
+    public float getMaxPredictedDistance() {
+        return maxPredictedDistance;
+    }
+
 
     // Keep track of the last point cloud rendered to avoid updating the VBO if point cloud
     // was not changed.  Do this using the timestamp since we can't compare PointCloud objects.
@@ -185,30 +190,30 @@ public class Calibrator {
         return new float[]{xFloat, yFloat};
     }
 
-    //https://learnopengl.com/Getting-started/Coordinate-Systems
-
     /**
-     * Calibra lo scale factor da un solo punto di osservazione.
-     * @param inference risultato della pydnet
-     * @param objPose punto dell'oggetto
-     * @param cameraPose Punto della camera in riferimento alla nuvola di punti
+     * Effettua le trasformazioni OpenGL per ricavare le coordinate XY di un punto nelle coordinate
+     * world-space.
+     * @param x coordinata world-space X del punto
+     * @param y coordinata world-space Y del punto
+     * @param z coordinata world-space Z del punto
+     * @return int[] array con le coordinate XY (X:0, Y:1), NULL nel caso di punto fuori schermo
      */
-    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose){
-
+    private int[] getXYFromPoint(float x, float y, float z){
         //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
+        float[] viewProjectionMatrix = new float[16];
+        Matrix.multiplyMM(viewProjectionMatrix, 0, cameraPerspective, 0, cameraView, 0);
 
-        //Passaggio fondamentale: trasformazione delle coordinate.
         float[] coords = new float[4];
+        float[] projCoords = new float[4];
 
-        coords[0] = objPose.tx();
-        coords[1] = objPose.ty();
-        coords[2] = objPose.tz();
+        //Estrazione coordinate dal punto
+        coords[0] = x;
+        coords[1] = y;
+        coords[2] = z;
         coords[3] = 1.0f;
 
-        float[] projCoords = new float[4];
-        Matrix.multiplyMV(projCoords, 0, modelViewProjection,0, coords,0);
+        //Passaggio fondamentale: trasformazione delle coordinate.
+        Matrix.multiplyMV(projCoords, 0, viewProjectionMatrix,0, coords,0);
 
         //Passaggio alle cordinate normali
         projCoords[0] /= projCoords[3];
@@ -216,13 +221,13 @@ public class Calibrator {
 
         //Clipping: se il punto è fuori dallo schermo non lo considero.
         if(projCoords[0] > 1.0f || projCoords[0] < -1.0f){
-            Log.w(TAG, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
-            return scaleFactor;
+            //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[0]);
+            return null;
         }
 
         if(projCoords[1] > 1.0f || projCoords[1] < -1.0f){
-            Log.w(TAG, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
-            return scaleFactor;
+            //Log.log(Level.WARNING, "Il punto di calibrazione è fuori schermo: "+projCoords[1]);
+            return null;
         }
 
         //Viewport Transform
@@ -233,19 +238,88 @@ public class Calibrator {
         float xFloat = (projCoords[0] * 0.5f) + 0.5f;
         float yFloat = (projCoords[1] * 0.5f) + 0.5f;
 
-        //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
+        //Trasformo le coordinate da origine bottom-left,
+        //  in modo che seguano la rotazione dello schermo
         float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
-        int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
+        int xReturn = Math.round(finalCoords[0] * (resolution.getWidth()-1));
+        int yReturn = Math.round(finalCoords[1] * (resolution.getHeight()-1));
 
-        int position = (resolution.getWidth() * y) + x;
+        return new int[]{xReturn, yReturn};
+    }
+
+    /**
+     * Cerca il massimo di una stima. Controlla solo metà dei valori, sfruttando la continuitò
+     * della stima.
+     * @param inference stima da verificare
+     */
+    public float calculateMaxEstimationDistance(FloatBuffer inference){
+        //Data la continuitò della stima, posso cercare solo nei numeri pari o dispari
+
+        float myMaxPredictedDistance = Float.MIN_VALUE;
+
+        inference.rewind();
+
+        while(inference.hasRemaining()){
+            float predictedDistance = inference.get();
+
+            //Ne salto uno: anche se non è il massimo si avvicina
+            if(inference.hasRemaining())
+                predictedDistance = inference.get();
+
+            if(predictedDistance > myMaxPredictedDistance)
+                myMaxPredictedDistance = predictedDistance;
+        }
+
+        maxPredictedDistance = myMaxPredictedDistance;
+
+        inference.rewind();
+
+        return maxPredictedDistance;
+    }
+
+    /**
+     * Metodo per arrotondare lo scale factor, per ridurre l'effetto flickering.
+     * Arrotondo alla seconda cifra decimale utile.
+     * Con la prima cifra è molto stabile, ma non è preciso.
+     */
+    public void roundScaleFactor(){
+        float multiplier = 1.0f;
+
+        while(scaleFactor * multiplier < 10.0f){
+            multiplier *= 10.0f;
+        }
+
+        scaleFactor = Math.round(scaleFactor * multiplier) / multiplier;
+    }
+
+    //https://learnopengl.com/Getting-started/Coordinate-Systems
+
+    /**
+     * Calibra lo scale factor da un solo punto di osservazione.
+     * @param inference risultato della pydnet
+     * @param objPose punto dell'oggetto
+     * @param cameraPose Punto della camera in riferimento alla nuvola di punti
+     * @return restituisce lo scaleFactor: se lo scale factor non è calcolabile, restituisce
+     * quello precedente.
+     */
+    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose){
+        int[] xy = getXYFromPoint(objPose.tx(), objPose.ty(), objPose.tz());
+
+        if(xy == null){
+            //punto non valido
+            return scaleFactor;
+        }
+
+        int position = (resolution.getWidth() * xy[1]) + xy[0];
 
         inference.rewind();
 
         if(inference.remaining() >= position){
             float predictedDistance = inference.get(position);
+
+
             double myScaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
 
             if(Double.isNaN(myScaleFactor)){
@@ -270,13 +344,15 @@ public class Calibrator {
      * @param rawY 0 <= y < height sullo schermo
      * @return scale factor
      */
-    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose, int rawX, int rawY){
+    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose,
+                                       int rawX, int rawY){
         //Origine dei punti Top-left
         //Devo ricavare i punti relativi
         float xFloat = (float) rawX/surfaceWidth;
         float yFloat = (float) rawY/surfaceHeight;
 
-        //Trasformo le coordinate da origine top-left, in modo che seguano la rotazione dello schermo
+        //Trasformo le coordinate da origine top-left,
+        // in modo che seguano la rotazione dello schermo
         float[] finalCoords = transformCoordTopLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[
@@ -303,6 +379,8 @@ public class Calibrator {
      * Classe wrapper per un punto RANSAC.
      */
     private static class RansacObject {
+        double distance;
+        double predictedDistance;
         double scaleFactor;
         float arConfidence;
         double mse;
@@ -384,30 +462,21 @@ public class Calibrator {
      * @param cloud point cloud da cui calcolare il fattore di scala
      * @param cameraPose posa della camera per il calcolo della distanza
      * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
-     * @param possibiliInlierDivider divisore del numero di punti inlier: indica la dimensione del set di possibili inlier
-     * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set: indica la dimensione minima del miglior consensus set.
+     * @param possibiliInlierDivider divisore del numero di punti inlier:
+     *                              indica la dimensione del set di possibili inlier
+     * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set:
+     *                                  indica la dimensione minima del miglior consensus set.
      * @return fattore di scala trovato tramite RANSAC
      */
-    public double calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud, Pose cameraPose, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
+    public double calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud,
+                                             Pose cameraPose, int numberOfIterations,
+                                             int possibiliInlierDivider,
+                                             int migliorConsensusSetDivider){
         if(possibiliInlierDivider <= migliorConsensusSetDivider)
             throw new IllegalArgumentException("divisori non validi");
-
-        //Vettore con le World-Coords
-        //X,Y,Z,Confidence
-        float[] coords = new float[4];
-
-        //Vettore di prima dopo la View Projection Matrix.
-        //X,Y,Z,(A)
-        float[] projectionCoords = new float[4];
-
-        //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
-
         lastTimestamp = cloud.getTimestamp();
 
         FloatBuffer points = cloud.getPoints();
-
         int numPoints = getNumPoints(cloud);
 
         //Check sul numero minimo di punti
@@ -415,52 +484,26 @@ public class Calibrator {
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
+        //Vettore con le World-Coords
+        //X,Y,Z,Confidence
+        float[] coords = new float[4];
+
+        //Ormai che ciclo i punti cerco il massimo
         float myMaxPredictedDistance = Float.MIN_VALUE;
 
         //Calcolo di ogni singolo scaleFactor O(N)
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
-
             float arConfidence = coords[3];
-            coords[3] = 1.0f;
 
-            //Passaggio fondamentale: trasformazione delle coordinate.
-            Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
+            int[] xy = getXYFromPoint(coords[0], coords[1], coords[2]);
 
-            //Passaggio alle cordinate normali
-            projectionCoords[0] /= projectionCoords[3];
-            projectionCoords[1] /= projectionCoords[3];
-//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
-
-            //Clipping: se il punto è fuori dallo schermo non lo considero.
-            //Avrei potuto spostare sopra il clipping e verificare con w
-            if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
+            if(xy == null){
                 numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
                 continue;
             }
 
-            if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
-                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
-                continue;
-            }
-
-            //Viewport Transform
-            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-            //Coordinate normalizzate(uv): [0.0,1.0]
-            //Origine in bottom-left.
-            //Seguo i fragment per la conversione.
-
-            float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
-            float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
-
-            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-            //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
-            int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
-
-            int position = (resolution.getWidth() * y) + x;
+            int position = (resolution.getWidth() * xy[1]) + xy[0];
 
             inference.rewind();
 
@@ -469,14 +512,20 @@ public class Calibrator {
                 double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
 
                 //Ricavo la distanza pydnet.
-                float predictedDistance = inference.get(position);
+                double predictedDistance = inference.get(position);
+//                predictedDistance = predictedDistance / maxPredictedDistance;
+//                predictedDistance = (float) (1.0 / predictedDistance);
                 predictedDistance = 255.0f - predictedDistance;
 
                 ransacObjects[numVisiblePoints] = new RansacObject();
+                ransacObjects[numVisiblePoints].distance = distance;
+                ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
                 ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );
                 ransacObjects[numVisiblePoints].arConfidence = arConfidence;
 
-                if(predictedDistance > myMaxPredictedDistance) myMaxPredictedDistance = predictedDistance;
+
+                if(predictedDistance > myMaxPredictedDistance)
+                    myMaxPredictedDistance = (float) predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
@@ -484,6 +533,8 @@ public class Calibrator {
                 numVisiblePoints--;
             }
         }
+
+        maxPredictedDistance = myMaxPredictedDistance;
 
         points.rewind();
 
@@ -519,7 +570,8 @@ public class Calibrator {
         for (int i = 0; i < numberOfIterations; i++){
             //possibiliInlier: Punti scelti a caso dal dataset
             Integer[] possibiliInlier = new Integer[puntiPerPossibiliInlier];
-            //Ordino possibiliInlier: mi servirà dopo per scorrere i punti non presenti più velocemente
+            //Ordino possibiliInlier:
+            //   mi servirà dopo per scorrere i punti non presenti più velocemente
             //Uso un set perché il rnd potrebbe darmi indici uguali
             SortedSet<Integer> possibiliInlierSet = new TreeSet<>();
             while(possibiliInlierSet.size() < puntiPerPossibiliInlier){
@@ -541,9 +593,12 @@ public class Calibrator {
             //Alterazione dell'algoritmo: calcolo del valore di soglia per aggiungere un punto
             //al consensusset: uso l'errore quadratico massimo presente in possibiliInlier
 
-            //Provo con MSE invece che con l'errore quadratico massimo come punto di sbarramento
+            //Come punto di sbarramento:
+            //Provato Maximum Square Error: ballerino
+            //Provato Mean Square Error: ballerino
+            //Provo Minimum Square Error: molto più stabile
 
-            double mseThreshold = 0.0; //Errore Quadratico massimo presente in possibiliInlier
+            double mseThreshold = Double.MAX_VALUE; //Valore di soglia per aggiungere un elemento al consensusSet
 
             //Si potrebbe far pesare una possibile confidenza di stima qui:
             //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
@@ -551,8 +606,26 @@ public class Calibrator {
 
             for (int k = 0; k < puntiPerPossibiliInlier; k++){
                 RansacObject nextObj = ransacObjects[possibiliInlier[k]];
-                mseThreshold += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
-                sumEstimationConfidence +=1;
+
+                //Prove con Maximum Square Error----------------------------------------------------
+                //double thisThreshold = Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2);
+                //if(mseThreshold < thisThreshold)
+                //    mseThreshold = thisThreshold;
+                //----------------------------------------------------------------------------------
+
+                //Prove con Mean Square Error-------------------------------------------------------
+                //Differenze tra scale factor
+                //mseThreshold += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                //Differenze tra distanza predetta scalata e distanza arcore
+                //mseThreshold += Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2) * 1;
+                //sumEstimationConfidence +=1;
+                //----------------------------------------------------------------------------------
+
+                //Prove con Minimum Square Error----------------------------------------------------
+                double thisThreshold = Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2);
+                if(mseThreshold > thisThreshold)
+                    mseThreshold = thisThreshold;
+                //----------------------------------------------------------------------------------
             }
             mseThreshold /= sumEstimationConfidence;
 
@@ -561,7 +634,8 @@ public class Calibrator {
             Integer[] consensusSet = Arrays.copyOf(possibiliInlier, numVisiblePoints);
             puntiConensusSet = puntiPerPossibiliInlier;
 
-            //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
+            //Ricerca dei punti non assegnati ai possibili inlier
+            // che posso aggiungere al consensusSet
             for (int k = 0, j = 0; k < numVisiblePoints-puntiPerPossibiliInlier; k++){
                 //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
@@ -572,7 +646,10 @@ public class Calibrator {
                 //Punto non presente: calcolo l'errore quadratico
                 RansacObject foreignObj = ransacObjects[k];
 
-                double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
+                //Differenze tra scale factor
+                //double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
+                //Differenze tra distanza predetta scalata e distanza arcore
+                double squareError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
 
                 //Se l'errore è minore del threshold aggiungo il punto
                 if(squareError < mseThreshold){
@@ -598,7 +675,10 @@ public class Calibrator {
 
                 for(int j = 0; j < puntiConensusSet; j++){
                     RansacObject nextObj = ransacObjects[consensusSet[j]];
-                    mse += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                    //Differenze tra scale factor
+                    //mse += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
+                    //Differenze tra distanza predetta scalata e distanza arcore
+                    mse += Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2) * 1;
                     sumEstimationConfidence +=1;
                 }
                 mse /= sumEstimationConfidence;
@@ -618,7 +698,6 @@ public class Calibrator {
         }else{
             scaleFactor = migliorScaleFactor;
             bestMSE = migliorMSE;
-            maxPredictedDistance = myMaxPredictedDistance;
         }
 
         return scaleFactor;
@@ -641,22 +720,12 @@ public class Calibrator {
         //X,Y,Z,Confidence
         float[] coords = new float[4];
 
-        //Vettore di prima dopo la View Projection Matrix.
-        //X,Y,Z,(A)
-        float[] projectionCoords = new float[4];
-
-        //Matrice usata per la trasformazione delle coordinate: world->view
-        float[] modelViewProjection = new float[16];
-        Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
-
         lastTimestamp = cloud.getTimestamp();
 
         FloatBuffer points = cloud.getPoints();
 
         int numPoints = getNumPoints(cloud);
         numVisiblePoints = numPoints;
-
-//        Log.d(TAG, "Num points: "+numPoints);
 
         //Ho un range di valori per cui accetto la nuvola.
         if(numPoints < MIN_POINTS) return scaleFactor;
@@ -670,68 +739,43 @@ public class Calibrator {
 
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
-
             float weight = coords[3];
-            coords[3] = 1.0f;
 
-            //Passaggio fondamentale: trasformazione delle coordinate.
-            Matrix.multiplyMV(projectionCoords, 0, modelViewProjection,0, coords,0);
+            int[] xy = getXYFromPoint(coords[0], coords[1], coords[2]);
 
-            //Passaggio alle cordinate normali
-            projectionCoords[0] /= projectionCoords[3];
-            projectionCoords[1] /= projectionCoords[3];
-//            projectionCoords[2] /= projectionCoords[3];//La z non mi interessa.
-
-            //Clipping: se il punto è fuori dallo schermo non lo considero.
-            //Avrei potuto spostare sopra il clipping e verificare con w
-            if(projectionCoords[0] > 1.0f || projectionCoords[0] < -1.0f){
+            if(xy == null){
                 numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
                 continue;
             }
 
-            if(projectionCoords[1] > 1.0f || projectionCoords[1] < -1.0f){
-                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
-                continue;
-            }
-
-            //Viewport Transform
-            //Coordinate iniziali: [-1.0,1.0], [-1.0,1.0]
-            //Coordinate normalizzate(uv): [0.0,1.0]
-            //Origine in bottom-left.
-            //Seguo i fragment per la conversione.
-
-            float xFloat = (projectionCoords[0] * 0.5f) + 0.5f;
-            float yFloat = (projectionCoords[1] * 0.5f) + 0.5f;
-
-            //Trasformo le coordinate da origine bottom-left, in modo che seguano la rotazione dello schermo
-            float[] finalCoords = transformCoordBottomLeft(xFloat, yFloat);
-
-            //Trasformo le coordinate normalizate in [0,width[, [0.height[
-            int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
-            int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
-
-            int position = (resolution.getWidth() * y) + x;
+            int position = (resolution.getWidth() * xy[1]) + xy[0];
 
             inference.rewind();
 
             if(inference.remaining() >= position){
                 //Ricavo la distanza.
                 double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
+
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
+//                predictedDistance = predictedDistance / maxPredictedDistance;
+//                predictedDistance = (float) (1.0 / predictedDistance);
                 predictedDistance = 255.0f - predictedDistance;
-                //predictedDistance = (float) Math.exp(predictedDistance);
+
                 //Faccio la somma: prendo una media PONDERATA dei punti.
                 sumScaleFactor += (distance / predictedDistance ) * weight;
                 sumWeight += weight;
 
-                if(myMaxPredictedDistance < predictedDistance) myMaxPredictedDistance = predictedDistance;
+                if(predictedDistance > myMaxPredictedDistance)
+                    myMaxPredictedDistance = predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
                 numVisiblePoints--;//Il punto è perso: ripeto con il prossimo.
             }
         }
+
+        maxPredictedDistance = myMaxPredictedDistance;
 
         //Devo verificare che ci sia il minimo di punti per la somma.
         if(sumWeight > 0){
@@ -741,7 +785,6 @@ public class Calibrator {
                 Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
             }else{
                 scaleFactor = tmpScaleFactor;
-                maxPredictedDistance = myMaxPredictedDistance;
             }
         }
 
@@ -818,7 +861,7 @@ public class Calibrator {
                     //Lower Clipping
                     prediction = Math.max(prediction, 0.0f);
 
-                    //Sfrutto la conversione float->int per effettuare la quantizzazione. (troncamento)
+                    //Sfrutto il cast per effettuare la quantizzazione. (troncamento)
 
                     int quantizedPrediciton = (int)(prediction * (finalLevels));
                     quantizedPrediciton = (int)((float)quantizedPrediciton * scale);
@@ -842,8 +885,11 @@ public class Calibrator {
             for (Runner thread : pool)
                 thread.waitJob();
 
-            Bitmap bmp = Bitmap.createBitmap(resolution.getWidth(), resolution.getHeight(), Bitmap.Config.ARGB_8888);
-            bmp.setPixels(output, 0, resolution.getWidth(), 0, 0, resolution.getWidth(), resolution.getHeight());
+            Bitmap bmp = Bitmap.createBitmap(resolution.getWidth(),
+                    resolution.getHeight(), Bitmap.Config.ARGB_8888);
+
+            bmp.setPixels(output, 0, resolution.getWidth(),
+                    0, 0, resolution.getWidth(), resolution.getHeight());
 
             return bmp;
 
@@ -919,13 +965,15 @@ public class Calibrator {
      * @param rawY coordinata x riferita all'oggetto (origine top-left)
      * @return Se il risultato è prossimo a zero vuol dire che lo scale factor corrisponde.
      */
-    public double calibrationTest(FloatBuffer inference, Pose objPose, Pose cameraPose, float rawX, float rawY){
+    public double calibrationTest(FloatBuffer inference, Pose objPose,
+                                  Pose cameraPose, float rawX, float rawY){
         //L'origine XY è Top-left
         //Per effettuare le trasformazioni ho bisogno di coordinate normali
         float xFloat = rawX/surfaceWidth;
         float yFloat = rawY/surfaceHeight;
 
-        //Trasformo le coordinate da origine top-left, in modo che seguano la rotazione dello schermo
+        //Trasformo le coordinate da origine top-left,
+        //  in modo che seguano la rotazione dello schermo
         float[] finalCoords = transformCoordTopLeft(xFloat, yFloat);
 
         //Trasformo le coordinate normalizate in [0,width[, [0.height[

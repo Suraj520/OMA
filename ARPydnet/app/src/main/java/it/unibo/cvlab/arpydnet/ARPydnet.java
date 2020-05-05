@@ -798,6 +798,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             try (PointCloud pointCloud = frame.acquirePointCloud()) {
                 if(inference != null){
                     if(calibrator.isLastTimestampDifferent(pointCloud)){
+//                        calibrator.calculateMaxEstimationDistance(inference);
+
                         double scaleFactorWeightedAverage = calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                         double scaleFactorRANSAC = calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 5, 4, 2);
 
@@ -805,6 +807,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         scaleFactorDifferenceSum += scaleFactorDifference;
                         scaleFactorDifferenceSumCounter++;
                         scaleFactorAverageDifference = scaleFactorDifferenceSum / scaleFactorDifferenceSumCounter;
+
+                        virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+                        virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+                        planeRenderer.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                     }
                 }
 

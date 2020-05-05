@@ -280,8 +280,8 @@ public class ComputeScene {
         objectRenderer.setCameraPose(sceneDataset.getCameraPose());
         Pose[] ancore = sceneDataset.getAncore();
 
-        //calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
-        calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 4, 2);
+        calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+        //calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 4, 2);
 
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", MSE: "+calibrator.getBestMSE()+", NP: "+calibrator.getNumVisiblePoints());
 

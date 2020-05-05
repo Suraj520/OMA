@@ -167,6 +167,13 @@ public class ObjectRenderer {
         return lowerDelta;
     }
 
+    private float maxPredictedDistance;
+    private int maxPredictedDistanceUniform;
+
+    public void setMaxPredictedDistance(float maxPredictedDistance) {
+        this.maxPredictedDistance = maxPredictedDistance;
+    }
+
     private int plasmaEnabledUniform;
     private int plasmaTextureUniform;
     private int plasmaFactorUniform;
@@ -242,6 +249,7 @@ public class ObjectRenderer {
         plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
 
         lowerDeltaUniform = GLES20.glGetUniformLocation(program, "u_lowerDelta");
+        maxPredictedDistanceUniform = GLES20.glGetUniformLocation(program, "u_maxPredictedDistance");
 
         windowSizeUniform = GLES20.glGetUniformLocation(program, "u_windowSize");
 
@@ -492,6 +500,7 @@ public class ObjectRenderer {
         GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
 
         GLES20.glUniform1f(lowerDeltaUniform, lowerDelta);
+        GLES20.glUniform1f(maxPredictedDistanceUniform, maxPredictedDistance);
 
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, screenData, 0);
         GLES20.glUniform2f(windowSizeUniform, screenData[2], screenData[3]);

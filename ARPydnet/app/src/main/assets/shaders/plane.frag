@@ -28,6 +28,7 @@ uniform float u_maskEnabled;
 
 uniform float u_upperDelta;
 uniform float u_lowerDelta;
+uniform float u_maxPredictedDistance;
 
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
@@ -81,8 +82,12 @@ void main() {
         }
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-//        float predictedDistance = exp(inferenceVector.r) * u_scaleFactor;
-//        float predictedDistance = inferenceVector.r * u_scaleFactor;
+
+//        float predictedDistance =  inferenceVector.r;
+//        predictedDistance = predictedDistance / u_maxPredictedDistance;
+//        predictedDistance = 1.0 / predictedDistance;
+//        predictedDistance = predictedDistance * u_scaleFactor;
+
         float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
 
         float dx = u_cameraPose.x-v_worldPos.x;

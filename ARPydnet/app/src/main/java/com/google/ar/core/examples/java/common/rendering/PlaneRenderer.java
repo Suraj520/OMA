@@ -162,12 +162,11 @@ public class PlaneRenderer {
         this.lowerDelta = lowerDelta;
     }
 
-    public float getUpperDelta() {
-        return upperDelta;
-    }
+    private float maxPredictedDistance;
+    private int maxPredictedDistanceUniform;
 
-    public float getLowerDelta() {
-        return lowerDelta;
+    public void setMaxPredictedDistance(float maxPredictedDistance) {
+        this.maxPredictedDistance = maxPredictedDistance;
     }
 
     private int plasmaEnabledUniform;
@@ -339,6 +338,7 @@ public class PlaneRenderer {
 
         upperDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_upperDelta");
         lowerDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_lowerDelta");
+        maxPredictedDistanceUniform = GLES20.glGetUniformLocation(planeProgram, "u_maxPredictedDistance");
 
         plasmaTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaTexture");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaEnabled");
@@ -570,6 +570,7 @@ public class PlaneRenderer {
 
         GLES20.glUniform1f(upperDeltaUniform, upperDelta);
         GLES20.glUniform1f(lowerDeltaUniform, lowerDelta);
+        GLES20.glUniform1f(maxPredictedDistanceUniform, maxPredictedDistance);
 
         GLES20.glUniform1f(rainEnabledUniform, rainEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(timeUniform, time);

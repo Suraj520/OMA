@@ -24,6 +24,7 @@ uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
 
 uniform float u_lowerDelta;
+uniform float u_maxPredictedDistance;
 
 uniform vec2 u_windowSize;
 
@@ -82,11 +83,14 @@ void main() {
 
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-//        float predictedDistance = exp(inferenceVector.r) * u_scaleFactor;
-//        float predictedDistance = inferenceVector.r * u_scaleFactor;
+
+//        float predictedDistance =  inferenceVector.r;
+//        predictedDistance = predictedDistance / u_maxPredictedDistance;
+//        predictedDistance = 1.0 / predictedDistance;
+//        predictedDistance = predictedDistance * u_scaleFactor;
+
         float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
 
-        //Fai un pò di ricerca su dove cade il punto...
 
         float dx = u_cameraPose.x - v_worldPos.x;
         float dy = u_cameraPose.y - v_worldPos.y;
