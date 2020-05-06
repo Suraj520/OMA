@@ -177,6 +177,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean maskEnabled = false;
     private boolean dualScreenMode = false;
     private boolean rainEnabled = false;
+    private boolean useRansac = false;
 
     private double scaleFactorDifference = 0.0;
     private double scaleFactorAverageDifference = 0.0;
@@ -336,12 +337,16 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         fragTransaction.add(R.id.container, currentFragment);
         fragTransaction.commit();
 
+        //Disabilito settings
+        settingsContainer.setVisibility(settingsContainer.getVisibility() == View.VISIBLE ? View.INVISIBLE : View.VISIBLE);
+
         //Layout etc
 
         Menu optionsMenu = optionsToolbar.getMenu();
         optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
         optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
         optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
+        optionsMenu.findItem(R.id.toggle_ransac).setIcon(useRansac ? R.drawable.ic_ransac_on : R.drawable.ic_ransac_off);
 
         //Attivo il depth solo se non siamo in dual mode.
         optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
@@ -361,6 +366,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 case R.id.toggle_rain:
                     rainEnabled = !rainEnabled;
+                    return true;
+
+                case R.id.toggle_ransac:
+                    useRansac = !useRansac;
+                    item.setIcon(useRansac ? R.drawable.ic_ransac_on : R.drawable.ic_ransac_off);
                     return true;
 
                 case R.id.toggle_settings:
@@ -807,12 +817,15 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 //                        calibrator.calculateMaxEstimationDistance(inference);
 
                         double scaleFactorWeightedAverage = calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
-                        double scaleFactorRANSAC = calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 5, 4, 2);
 
-                        scaleFactorDifference = Math.abs(scaleFactorRANSAC-scaleFactorWeightedAverage);
-                        scaleFactorDifferenceSum += scaleFactorDifference;
-                        scaleFactorDifferenceSumCounter++;
-                        scaleFactorAverageDifference = scaleFactorDifferenceSum / scaleFactorDifferenceSumCounter;
+                        if(useRansac){
+                            double scaleFactorRANSAC = calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 5, 5, 4);
+
+                            scaleFactorDifference = Math.abs(scaleFactorRANSAC-scaleFactorWeightedAverage);
+                            scaleFactorDifferenceSum += scaleFactorDifference;
+                            scaleFactorDifferenceSumCounter++;
+                            scaleFactorAverageDifference = scaleFactorDifferenceSum / scaleFactorDifferenceSumCounter;
+                        }
 
                         virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
@@ -993,8 +1006,15 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         double scaleFactorDifferencePercent = (scaleFactorDifference / calibrator.getScaleFactor()) * 100;
         double scaleFactorMaxDifferencePercent = (scaleFactorAverageDifference / calibrator.getScaleFactor()) * 100;
 
-        String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints, calibrator.getBestMSE() * 1000, scaleFactorDifference, scaleFactorDifferencePercent, scaleFactorAverageDifference, scaleFactorMaxDifferencePercent);
-        logTextView.setText(text);
+        if(useRansac){
+            String text = getString(R.string.log_general_ransac, calibrator.getScaleFactor(), numPoints, calibrator.getBestMSE() * 1000, scaleFactorDifference, scaleFactorDifferencePercent, scaleFactorAverageDifference, scaleFactorMaxDifferencePercent);
+            logTextView.setText(text);
+        }else{
+            String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints);
+            logTextView.setText(text);
+        }
+
+
     }
 
     private void setNoLogMessage(){
