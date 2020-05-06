@@ -554,7 +554,7 @@ public class Calibrator {
 
         double migliorScaleFactor = Double.NaN; //ScaleFactor stimato da migliorConsensusSet
         Integer[] migliorConsensusSet;              //Dati che rappresentano i migliori punti
-        double migliorMSE = Float.MAX_VALUE;    //Errore relativo ai punti di migliorConsensusSet
+        double migliorMSE = Double.MAX_VALUE;    //Errore relativo ai punti di migliorConsensusSet
 
         //Inizializzazione
 
@@ -602,7 +602,7 @@ public class Calibrator {
 
             //Si potrebbe far pesare una possibile confidenza di stima qui:
             //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
-            double sumEstimationConfidence = 0.0;
+            //float sumEstimationConfidence = 0.0f;
 
             for (int k = 0; k < puntiPerPossibiliInlier; k++){
                 RansacObject nextObj = ransacObjects[possibiliInlier[k]];
@@ -627,7 +627,8 @@ public class Calibrator {
                     mseThreshold = thisThreshold;
                 //----------------------------------------------------------------------------------
             }
-            mseThreshold /= sumEstimationConfidence;
+
+            //mseThreshold /= sumEstimationConfidence;
 
             //consensusSet: Candidato a diventare migliorConsensusSet
             //ConsensusSet inizializzato a possibiliInlier
@@ -671,7 +672,7 @@ public class Calibrator {
 
                 //Si potrebbe far pesare una possibile confidenza di stima qui:
                 //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
-                sumEstimationConfidence = 0.0;
+                float sumEstimationConfidence = 0.0f;
 
                 for(int j = 0; j < puntiConensusSet; j++){
                     RansacObject nextObj = ransacObjects[consensusSet[j]];

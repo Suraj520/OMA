@@ -165,6 +165,11 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     //Usato per calibrare le maschere degli oggetti.
     private Calibrator calibrator = null;
+
+    //Prova per usare il calibratore solo all'aggiornamento della stima:
+    //Non funziona bene
+    //private boolean thisFrameIsCalibrated  = false;
+
     //Usato per generare il depth color.
     private ColorMapper colorMapper = null;
 
@@ -771,6 +776,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                     inference = rawInference.asFloatBuffer();
                     isProcessingFrame = false;
+//                    thisFrameIsCalibrated = false;
                 });
             }
 
@@ -811,6 +817,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         planeRenderer.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+
+//                        thisFrameIsCalibrated = true;
                     }
                 }
 
