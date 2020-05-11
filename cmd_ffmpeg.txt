@@ -1,0 +1,5 @@
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\PydnetV3\depth\%d.jpg -qscale:v 2 -vf "setpts=2*PTS" depth_pydnet_v2.avi
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" oma_pydnet_v2.avi
+ 
+  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\Pydnet\depth\%d.jpg -qscale:v 2 -vf "setpts=2*PTS" depth_pydnet.avi
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\Pydnet\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" oma_pydnet.avi

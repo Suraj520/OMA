@@ -7,16 +7,16 @@
 		"delta":0.05
 	},
 	{
-		"name":"eye",
-		"obj":"eyeball.obj",
-		"texture":"eyeball.png",
-		"scaleFactor":0.07,
-		"delta":0.05
-	},
-	{
 		"name":"duck",
 		"obj":"rubber_duck.obj",
 		"texture":"rubber_duck.png",
+		"scaleFactor":0.08,
+		"delta":0.05
+	},
+		{
+		"name":"barrel",
+		"obj":"objBarrel.obj",
+		"texture":"wood.jpg",
 		"scaleFactor":0.08,
 		"delta":0.05
 	}

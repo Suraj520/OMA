@@ -378,6 +378,8 @@ public class ObjectRenderer {
         //Altrimenti nello shader inverto i colori.
         int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
 
+        //TODO: Rivedi http://forum.lwjgl.org/index.php?topic=5559.0
+
         GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, image.getWidth(), image.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, rgb);
 
         GL30.glBindTexture(textureTarget, 0);
