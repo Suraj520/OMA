@@ -9,4 +9,5 @@ void main() {
     vec2 uv = vec2(v_textCoord.x, 1.0-v_textCoord.y);
     vec4 textureColor = texture2D(u_texture, uv);
     gl_FragColor = textureColor;
+    //gl_FragColor = vec4(textureColor.b, textureColor.g, textureColor.r, 1.0);
 }

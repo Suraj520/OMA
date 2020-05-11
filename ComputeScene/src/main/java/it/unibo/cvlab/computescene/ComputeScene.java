@@ -31,6 +31,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -47,35 +48,39 @@ public class ComputeScene {
 
     private int surfaceWidth, surfaceHeight;
     private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
-    private final ObjectRenderer objectRenderer = new ObjectRenderer();
     private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
     private final ScreenshotRenderer inferenceRenderer = new ScreenshotRenderer();
+
+    private ObjectRenderer[] objectRenderers;
 
     private final Calibrator calibrator = new Calibrator();
 
     private DatasetLoader datasetLoader;
+    private ObjectLoader.Object[] objects;
     private MySaver saver;
     private Model model;
-    private Obj obj;
-    private BufferedImage texture;
+
 
     private float[] inferenceArray;
     private ScreenshotRenderer.ColorType colorType;
-    private float objFactor;
-    private float lowerDelta;
 
     private ColorMapper colorMapper;
 
-    public ComputeScene(DatasetLoader datasetLoader, MySaver saver, Model model, Obj obj, BufferedImage texture, ScreenshotRenderer.ColorType colorType, float objFactor, float lowerDelta) {
+    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model,ScreenshotRenderer.ColorType colorType) {
         this.datasetLoader = datasetLoader;
+        this.objects = objects;
+        this.objectRenderers = new ObjectRenderer[objects.length];
         this.saver = saver;
         this.model = model;
-        this.obj = obj;
-        this.texture = texture;
         this.colorType = colorType;
-        this.objFactor = objFactor;
-        this.lowerDelta = lowerDelta;
         this.colorMapper = new ColorMapper(model.getPlasmaFactor(), 4);
+
+        //Inizializzazione rendering oggetti: imposto già il delta e lo scale factor dell'oggetto.
+        for (int i = 0; i < objects.length; i++) {
+            objectRenderers[i] = new ObjectRenderer();
+            objectRenderers[i].setObjScaleFactor(objects[i].getScaleFactor());
+            objectRenderers[i].setLowerDelta(objects[i].getDelta());
+        }
     }
 
     public void load() throws IOException {
@@ -213,12 +218,12 @@ public class ComputeScene {
 
         try {
             backgroundRenderer.createOnGlThread(surfaceWidth, surfaceHeight);
-            objectRenderer.createOnGlThread(obj, texture);
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
             inferenceRenderer.createOnGlThread(colorType, surfaceWidth, surfaceHeight, model.getInputWidth(), model.getInputHeight());
 
-            objectRenderer.setObjScaleFactor(objFactor);
-            objectRenderer.setLowerDelta(lowerDelta);
+            for (int i = 0; i < objectRenderers.length; i++) {
+                objectRenderers[i].createOnGlThread(objects[i].getObj(), objects[i].getTexture());
+            }
         } catch (IOException e) {
             Log.log(Level.SEVERE, "Impossibile caricare shaders: "+e.getLocalizedMessage());
         }
@@ -272,26 +277,31 @@ public class ComputeScene {
         BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
         saver.saveDepth(sceneDataset.getFrameNumber(), colorMap);
 
-        objectRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
-        objectRenderer.setMaskEnabled(true);
-        objectRenderer.setObjScaleFactor(objFactor);
+        for (int i = 0; i < objectRenderers.length; i++) {
+            objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
+            objectRenderers[i].setMaskEnabled(true);
+            objectRenderers[i].setCameraPose(sceneDataset.getCameraPose());
+        }
 
         //Faccio il rendering degli oggetti.
-        objectRenderer.setCameraPose(sceneDataset.getCameraPose());
+
         Pose[] ancore = sceneDataset.getAncore();
 
-        if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 5, 4))
+        if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.2f))
         {
             //Calibrazione con RANSAC fallita: provo con media ponderata
             calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
         }
 
-        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", MSE: "+calibrator.getBestMSE()+", NP: "+calibrator.getNumVisiblePoints());
+        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", NP: "+calibrator.getNumVisiblePoints());
+
+        int i = 0;
 
         for (Pose ancora : ancore){
-            objectRenderer.setScaleFactor((float) calibrator.getScaleFactor());
-            objectRenderer.updateModelMatrix(ancora.getModelMatrix());
-            objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
+            objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
+            objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            i++;
         }
 
         //Salvo il rendering
@@ -334,6 +344,13 @@ public class ComputeScene {
         ObjectLoader objectLoader = new ObjectLoader();
         ComputeScene computeScene;
 
+        ObjectLoader.Object[] objects = objectLoader.parseObjectList();
+
+        if(objects.length <= 0){
+            System.out.println("Nessun oggetto presente");
+            System.exit(1);
+        }
+
         System.out.println("Seleziona il modello:");
         Path[] modelPaths = modelLoader.getModelPathSet().toArray(new Path[0]);
 
@@ -370,78 +387,13 @@ public class ComputeScene {
 
         System.out.println("Numero frames: "+datasetLoader.getFrames());
 
-        Path[] objPaths = objectLoader.getObjPathSet().toArray(new Path[0]);
-
-        if(objPaths.length <= 0){
-            System.out.println("Nessun oggetto presente");
-            System.exit(1);
-        }
-
-        Path objPath = requestInput(objPaths, inReader);
-        System.out.println(objPath);
-        Obj obj = objectLoader.parseObj(objPath);
-
-        int numVertices = obj.getNumVertices();
-        System.out.println("Hai scelto un oggetto con "+ numVertices + " vertici");
-
-        Path[] texturePaths = objectLoader.getTexturePathSet().toArray(new Path[0]);
-
-        if(texturePaths.length <= 0){
-            System.out.println("Nessuna texture per oggetti presente");
-            System.exit(1);
-        }
-
-        Path texturePath = requestInput(texturePaths, inReader);
-        System.out.println(texturePath);
-
-        BufferedImage texture = objectLoader.getTexutre(texturePath);
-
-
-        System.out.println("Inserisci la dimensione degli oggetti (default "+ObjectRenderer.DEFAULT_OBJ_SCALE_FACTOR+"): ");
-        float objFactor;
-        do {
-            String tmp = inReader.readLine();
-
-            if(tmp == null) System.exit(0);
-
-            if(tmp.isEmpty()) {
-                objFactor = ObjectRenderer.DEFAULT_OBJ_SCALE_FACTOR;
-                break;
-            }
-
-            try {
-                objFactor = Float.parseFloat(tmp);
-            } catch (NumberFormatException e) {
-                objFactor = Float.NaN;
-            }
-        } while (Float.isNaN(objFactor) || objFactor <= 0.0f);
-
-        System.out.println("Inserisci il delta di occlusione (default "+ObjectRenderer.DEFAULT_LOWER_DELTA+"m): ");
-        float lowerDelta;
-        do {
-            String tmp = inReader.readLine();
-
-            if(tmp == null) System.exit(0);
-
-            if(tmp.isEmpty()){
-                lowerDelta = ObjectRenderer.DEFAULT_LOWER_DELTA;
-                break;
-            }
-
-            try {
-                lowerDelta = Float.parseFloat(tmp);
-            } catch (NumberFormatException e) {
-                lowerDelta = Float.NaN;
-            }
-        } while (Float.isNaN(lowerDelta));
-
         System.out.println("Configurazione completata.");
         System.out.println("Procedo alla post-produzione delle immagini (cartella oma)");
         System.out.println("Salvo anche una versione depth (cartella depth)");
 
         //Passo all'app datasetLoader, modello, oggetto e texture
 
-        computeScene = new ComputeScene(datasetLoader, saver, model, obj, texture, colorType, objFactor, lowerDelta);
+        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType);
 
         System.out.println("Precaricamento...");
         computeScene.load();

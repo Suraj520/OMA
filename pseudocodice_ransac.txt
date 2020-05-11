@@ -1,0 +1,41 @@
+
+//Algoritmo ransac
+
+contatoreMigliorPunto := 0
+migliorPunto := null
+
+ripeto n volte:
+	puntoX := prendo un punto a caso
+	possibileScaleFactor := puntoX.scaleFactor
+	
+	//Calcolo l'errore quadratico medio dello scaleFactor rispetto agli altri punti
+	//e lo uso come valore di soglia per accettare altri punti
+	
+	//Valore di soglia per accettare altri punti
+	mseThreshold := 0.0
+	
+	per ogni altro punto:
+		puntoY:= prossimo punto del ciclo non appartenente a puntoX
+		
+		mseThreshold += (puntoY.stimaDistanzaPydnet * possibileScaleFactor - puntoY.distanzaRilevataARCore)^2
+		
+	mseThreshold /= numero altri punti
+	
+	puntiConsensusSet := array con i punti che superano la soglia
+	puntiConsensusSet.add(puntoX)
+	
+	per ogni altro punto:
+		puntoY:= prossimo punto del ciclo non appartenente a puntoX
+		
+		mseY := (puntoY.stimaDistanzaPydnet * possibileScaleFactor - puntoY.distanzaRilevataARCore)^2
+		
+		se mseY < mseThreshold:
+			puntiConsensusSet.add(puntoY)
+			
+	
+	se puntiConsensusSet.length > contatoreMigliorPunto:
+		contatoreMigliorPunto := puntiConsensusSet.length
+		migliorPunto := puntoX
+		
+
+return migliorPunto.scaleFactor

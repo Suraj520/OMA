@@ -462,34 +462,25 @@ public class Calibrator {
      * @param cloud point cloud da cui calcolare il fattore di scala
      * @param cameraPose posa della camera per il calcolo della distanza
      * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
-     * @param possibiliInlierDivider divisore del numero di punti inlier:
-     *                              indica la dimensione del set di possibili inlier
-     * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set:
-     *                                  indica la dimensione minima del miglior consensus set.
+     * @param normalizedThreshold valore di soglia per accettare nuovi dati nel consensusSet
      * @return fattore di scala trovato tramite RANSAC
      */
     public double calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud,
                                              Pose cameraPose, int numberOfIterations,
-                                             int possibiliInlierDivider,
-                                             int migliorConsensusSetDivider){
-        if(possibiliInlierDivider <= migliorConsensusSetDivider)
-            throw new IllegalArgumentException("divisori non validi");
+                                             float normalizedThreshold){
         lastTimestamp = cloud.getTimestamp();
 
         FloatBuffer points = cloud.getPoints();
         int numPoints = getNumPoints(cloud);
 
         //Check sul numero minimo di punti
-        if(numPoints < possibiliInlierDivider) return scaleFactor;
+        if(numPoints < 1) return scaleFactor;
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
         //Vettore con le World-Coords
         //X,Y,Z,Confidence
         float[] coords = new float[4];
-
-        //Ormai che ciclo i punti cerco il massimo
-        float myMaxPredictedDistance = Float.MIN_VALUE;
 
         //Calcolo di ogni singolo scaleFactor O(N)
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
@@ -513,19 +504,15 @@ public class Calibrator {
 
                 //Ricavo la distanza pydnet.
                 double predictedDistance = inference.get(position);
-//                predictedDistance = predictedDistance / maxPredictedDistance;
-//                predictedDistance = (float) (1.0 / predictedDistance);
-                predictedDistance = 255.0f - predictedDistance;
+                predictedDistance = predictedDistance / maxPredictedDistance;
+                predictedDistance = (float) (1.0 / predictedDistance);
+                //predictedDistance = 255.0f - predictedDistance;
 
                 ransacObjects[numVisiblePoints] = new RansacObject();
                 ransacObjects[numVisiblePoints].distance = distance;
                 ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
                 ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );
                 ransacObjects[numVisiblePoints].arConfidence = arConfidence;
-
-
-                if(predictedDistance > myMaxPredictedDistance)
-                    myMaxPredictedDistance = (float) predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
@@ -534,9 +521,10 @@ public class Calibrator {
             }
         }
 
-        maxPredictedDistance = myMaxPredictedDistance;
-
         points.rewind();
+
+        //Check sul numero minimo di punti
+        if(numVisiblePoints < 1) return scaleFactor;
 
         //Sorting per confidenza, decrescente: O(N*log2(N))
         //Non ho scelto parallel perché la lista degli elementi è limitata
@@ -546,23 +534,16 @@ public class Calibrator {
         //Applico sbarramento numero passimo punti
         if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
 
-        //Algoritmo "RANSAC"
+        //Algoritmo RANSAC
         //Basato sullo pseudo-codice di https://it.wikipedia.org/wiki/RANSAC
-
-        //Aggiorno seed random
-        //rnd.setSeed(lastTimestamp);
-
-        double migliorScaleFactor = Double.NaN; //ScaleFactor stimato da migliorConsensusSet
-        Integer[] migliorConsensusSet;              //Dati che rappresentano i migliori punti
-        double migliorMSE = Double.MAX_VALUE;    //Errore relativo ai punti di migliorConsensusSet
+        double migliorScaleFactor = Double.NaN;         //ScaleFactor stimato da punto iniziale
+        double migliorScaleFactorAverage = Double.NaN;  //ScaleFactor stimato da migliorConsensusSet
+        Integer[] migliorConsensusSet = new Integer[0]; //Dati che rappresentano i migliori punti
 
         //Inizializzazione
 
         //Punti contenuti in possibiliInlier
-        int puntiPerPossibiliInlier = numVisiblePoints / possibiliInlierDivider;
-
-        //Punti richiesti per fare un migliorConsensusSet
-        int puntiPerMigliorConsensusSet = numVisiblePoints / migliorConsensusSetDivider;
+        int puntiPerPossibiliInlier = 1;
 
         //Punti per consensusSet: range [puntiPerPossibiliInlier, numVisiblePoints]
         int puntiConensusSet;
@@ -570,8 +551,7 @@ public class Calibrator {
         for (int i = 0; i < numberOfIterations; i++){
             //possibiliInlier: Punti scelti a caso dal dataset
             Integer[] possibiliInlier = new Integer[puntiPerPossibiliInlier];
-            //Ordino possibiliInlier:
-            //   mi servirà dopo per scorrere i punti non presenti più velocemente
+            //Ordino possibiliInlier: mi servirà dopo per scorrere i punti non presenti più velocemente
             //Uso un set perché il rnd potrebbe darmi indici uguali
             SortedSet<Integer> possibiliInlierSet = new TreeSet<>();
             while(possibiliInlierSet.size() < puntiPerPossibiliInlier){
@@ -590,58 +570,40 @@ public class Calibrator {
             }
             possibileScaleFactor = sumScaleFactors / sumConfidence;
 
-            //Alterazione dell'algoritmo: calcolo del valore di soglia per aggiungere un punto
-            //al consensusset: uso l'errore quadratico massimo presente in possibiliInlier
+            //Calcolo minimo e massimo per normalizzare
 
-            //Come punto di sbarramento:
-            //Provato Maximum Square Error: ballerino
-            //Provato Mean Square Error: ballerino
-            //Provo Minimum Square Error: molto più stabile
+            double minError = Double.MAX_VALUE;
+            double maxError = Double.MIN_VALUE;
 
-            double mseThreshold = Double.MAX_VALUE; //Valore di soglia per aggiungere un elemento al consensusSet
+            for (int k = 0, j=0; k < numVisiblePoints; k++){
+                //Qui serve il sorting di possibiliInlier
+                if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
+                    //Punto presente in possibiliInlier: skip
+                    j++;
+                    continue;
+                }
 
-            //Si potrebbe far pesare una possibile confidenza di stima qui:
-            //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
-            //float sumEstimationConfidence = 0.0f;
+                //Punto non presente: calcolo l'errore quadratico minimo
+                RansacObject foreignObj = ransacObjects[k];
 
-            for (int k = 0; k < puntiPerPossibiliInlier; k++){
-                RansacObject nextObj = ransacObjects[possibiliInlier[k]];
+                double thisError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
 
-                //Prove con Maximum Square Error----------------------------------------------------
-                //double thisThreshold = Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2);
-                //if(mseThreshold < thisThreshold)
-                //    mseThreshold = thisThreshold;
-                //----------------------------------------------------------------------------------
-
-                //Prove con Mean Square Error-------------------------------------------------------
-                //Differenze tra scale factor
-                //mseThreshold += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
-                //Differenze tra distanza predetta scalata e distanza arcore
-                //mseThreshold += Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2) * 1;
-                //sumEstimationConfidence +=1;
-                //----------------------------------------------------------------------------------
-
-                //Prove con Minimum Square Error----------------------------------------------------
-                double thisThreshold = Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2);
-                if(mseThreshold > thisThreshold)
-                    mseThreshold = thisThreshold;
-                //----------------------------------------------------------------------------------
+                if(thisError > maxError) maxError = thisError;
+                if(thisError < minError) minError = thisError;
             }
-
-            //mseThreshold /= sumEstimationConfidence;
 
             //consensusSet: Candidato a diventare migliorConsensusSet
             //ConsensusSet inizializzato a possibiliInlier
             Integer[] consensusSet = Arrays.copyOf(possibiliInlier, numVisiblePoints);
             puntiConensusSet = puntiPerPossibiliInlier;
 
-            //Ricerca dei punti non assegnati ai possibili inlier
-            // che posso aggiungere al consensusSet
-            for (int k = 0, j = 0; k < numVisiblePoints-puntiPerPossibiliInlier; k++){
+            //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
+            for (int k = 0, j = 0; k < numVisiblePoints; k++){
                 //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
                     //Punto presente in possibiliInlier: skip
                     j++;
+                    continue;
                 }
 
                 //Punto non presente: calcolo l'errore quadratico
@@ -650,10 +612,12 @@ public class Calibrator {
                 //Differenze tra scale factor
                 //double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
                 //Differenze tra distanza predetta scalata e distanza arcore
-                double squareError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
+                double thisError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
+
+                double normalizedError = (thisError - minError) / (maxError-minError);
 
                 //Se l'errore è minore del threshold aggiungo il punto
-                if(squareError < mseThreshold){
+                if(normalizedError < normalizedThreshold){
                     consensusSet[puntiConensusSet++] = k;
 
                     //Aggiorno le somme, MA NON maxSquareError:
@@ -663,42 +627,19 @@ public class Calibrator {
             }
 
             //Se ho un numero sufficiente di punti allora il modello è buono
-            if(puntiConensusSet >= puntiPerMigliorConsensusSet){
+            if(puntiConensusSet >= migliorConsensusSet.length){
                 //Ricalcolo possibleScaleFactor
-                possibileScaleFactor = sumScaleFactors / sumConfidence;
-
-                //Calcolo l'errore quadratico medio
-                double mse = 0.0;
-
-                //Si potrebbe far pesare una possibile confidenza di stima qui:
-                //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
-                float sumEstimationConfidence = 0.0f;
-
-                for(int j = 0; j < puntiConensusSet; j++){
-                    RansacObject nextObj = ransacObjects[consensusSet[j]];
-                    //Differenze tra scale factor
-                    //mse += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
-                    //Differenze tra distanza predetta scalata e distanza arcore
-                    mse += Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2) * 1;
-                    sumEstimationConfidence +=1;
-                }
-                mse /= sumEstimationConfidence;
-
-                //Se l'errore è migliore allora consensusSet diventa migliorConsensusSet
-                if(mse < migliorMSE){
-                    migliorConsensusSet = consensusSet;
-                    migliorScaleFactor = possibileScaleFactor;
-                    migliorMSE = mse;
-                }
+                migliorScaleFactorAverage = sumScaleFactors / sumConfidence;
+                migliorScaleFactor = possibileScaleFactor;
+                migliorConsensusSet = Arrays.copyOfRange(consensusSet, 0, puntiConensusSet);
             }
         }
 
         //Salvo il nuovo valore.
-        if(Double.isNaN(migliorScaleFactor)){
+        if(Double.isNaN(migliorScaleFactorAverage)){
             Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
         }else{
-            scaleFactor = migliorScaleFactor;
-            bestMSE = migliorMSE;
+            scaleFactor = migliorScaleFactorAverage;
         }
 
         return scaleFactor;
@@ -736,8 +677,6 @@ public class Calibrator {
         float sumScaleFactor = 0;
         float sumWeight = 0;
 
-        float myMaxPredictedDistance = Float.MIN_VALUE;
-
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
             float weight = coords[3];
@@ -759,24 +698,19 @@ public class Calibrator {
 
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
-//                predictedDistance = predictedDistance / maxPredictedDistance;
-//                predictedDistance = (float) (1.0 / predictedDistance);
-                predictedDistance = 255.0f - predictedDistance;
+                predictedDistance = predictedDistance / maxPredictedDistance;
+                predictedDistance = (float) (1.0 / predictedDistance);
+                //predictedDistance = 255.0f - predictedDistance;
 
                 //Faccio la somma: prendo una media PONDERATA dei punti.
                 sumScaleFactor += (distance / predictedDistance ) * weight;
                 sumWeight += weight;
-
-                if(predictedDistance > myMaxPredictedDistance)
-                    myMaxPredictedDistance = predictedDistance;
             }else{
                 //Stranamente non riesco a trovare la predizione.
                 Log.d(TAG, "Impossibile trovare predizione di calibrazione");
                 numVisiblePoints--;//Il punto è perso: ripeto con il prossimo.
             }
         }
-
-        maxPredictedDistance = myMaxPredictedDistance;
 
         //Devo verificare che ci sia il minimo di punti per la somma.
         if(sumWeight > 0){

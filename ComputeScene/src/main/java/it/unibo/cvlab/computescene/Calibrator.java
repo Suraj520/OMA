@@ -67,12 +67,6 @@ public class Calibrator {
         return scaleFactor;
     }
 
-    private double bestMSE;
-
-    public double getBestMSE() {
-        return bestMSE;
-    }
-
     public Calibrator() {
         this(MAPPER_SCALE_FACTOR);
     }
@@ -346,26 +340,24 @@ public class Calibrator {
      *
      * @param inference stima di profondità
      * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
-     * @param possibiliInlierDivider divisore del numero di punti inlier: indica la dimensione del set di possibili inlier
-     * @param migliorConsensusSetDivider divisore del numero di punti del miglior consensus set: indica la dimensione minima del miglior consensus set.
+     * @param normalizedThreshold valore di soglia tra 0.0 e 1.0
      * @return fattore di scala trovato tramite RANSAC
      */
-    public boolean calibrateScaleFactorRANSAC(FloatBuffer inference, Point[] points, int numberOfIterations, int possibiliInlierDivider, int migliorConsensusSetDivider){
-        if(possibiliInlierDivider <= migliorConsensusSetDivider)
-            throw new IllegalArgumentException("divisori non validi");
-
+    public boolean calibrateScaleFactorRANSAC(FloatBuffer inference, Point[] points, int numberOfIterations, float normalizedThreshold){
         numVisiblePoints = 0;
 
         int numPoints = points.length;
 
         //Check sul numero minimo di punti
-        if(numPoints < possibiliInlierDivider) return false;
+        if(numPoints < 1) return false;
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
         //Calcolo di ogni singolo scaleFactor O(N)
         for (Point point : points){
             if(point == null) continue;
+
+            if(point.getConfidence() < 0.3f) continue;
 
             int[] coords = getXYFromPoint(point);
 
@@ -397,6 +389,9 @@ public class Calibrator {
             }
         }
 
+        //Numero di punti non sufficiente
+        if(numVisiblePoints < 1) return false;
+
         //Sorting per confidenza, decrescente: O(N*log2(N))
         //Non ho scelto parallel perché la lista degli elementi è limitata
         Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
@@ -405,30 +400,28 @@ public class Calibrator {
         //Applico sbarramento numero passimo punti
         //if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
 
-        //Algoritmo "RANSAC"
+        //Algoritmo RANSAC
         //Basato sullo pseudo-codice di https://it.wikipedia.org/wiki/RANSAC
-        double migliorScaleFactor = Double.NaN; //ScaleFactor stimato da migliorConsensusSet
-        Integer[] migliorConsensusSet;              //Dati che rappresentano i migliori punti
-        double migliorMSE = Double.MAX_VALUE;    //Errore relativo ai punti di migliorConsensusSet
+        double migliorScaleFactor = Double.NaN;         //ScaleFactor stimato da punto iniziale
+        double migliorScaleFactorAverage = Double.NaN;  //ScaleFactor stimato da migliorConsensusSet
+        Integer[] migliorConsensusSet = new Integer[0]; //Dati che rappresentano i migliori punti
 
         //Inizializzazione
 
         //Punti contenuti in possibiliInlier
-        int puntiPerPossibiliInlier = numVisiblePoints / possibiliInlierDivider;
-
-        //Punti richiesti per fare un migliorConsensusSet
-        int puntiPerMigliorConsensusSet = numVisiblePoints / migliorConsensusSetDivider;
+        int puntiPerPossibiliInlier = 1;
 
         //Punti per consensusSet: range [puntiPerPossibiliInlier, numVisiblePoints]
         int puntiConensusSet;
 
-        for (int i = 0; i < numberOfIterations; i++){
+            for (int i = 0; i < numberOfIterations; i++){
             //possibiliInlier: Punti scelti a caso dal dataset
             Integer[] possibiliInlier = new Integer[puntiPerPossibiliInlier];
             //Ordino possibiliInlier: mi servirà dopo per scorrere i punti non presenti più velocemente
             //Uso un set perché il rnd potrebbe darmi indici uguali
             SortedSet<Integer> possibiliInlierSet = new TreeSet<>();
             while(possibiliInlierSet.size() < puntiPerPossibiliInlier){
+
                 possibiliInlierSet.add(rnd.nextInt(numVisiblePoints));
             }
             possibiliInlier = possibiliInlierSet.toArray(possibiliInlier);
@@ -444,18 +437,26 @@ public class Calibrator {
             }
             possibileScaleFactor = sumScaleFactors / sumConfidence;
 
-            //Alterazione dell'algoritmo: calcolo del valore di soglia per aggiungere un punto
-            //al consensusset: uso l'errore quadratico massimo presente in possibiliInlier
+            //Calcolo minimo e massimo per normalizzare
 
-            //Errore quadratico minimo come punto di sbarramento
+            double minError = Double.MAX_VALUE;
+            double maxError = Double.MIN_VALUE;
 
-            double mseThreshold = Double.MAX_VALUE;
+            for (int k = 0, j=0; k < numVisiblePoints; k++){
+                //Qui serve il sorting di possibiliInlier
+                if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
+                    //Punto presente in possibiliInlier: skip
+                    j++;
+                    continue;
+                }
 
-            for (int k = 0; k < puntiPerPossibiliInlier; k++){
-                RansacObject nextObj = ransacObjects[possibiliInlier[k]];
-                double thisThreshold = Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2);
-                if(mseThreshold > thisThreshold)
-                    mseThreshold = thisThreshold;
+                //Punto non presente: calcolo l'errore quadratico minimo
+                RansacObject foreignObj = ransacObjects[k];
+
+                double thisError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
+
+                if(thisError > maxError) maxError = thisError;
+                if(thisError < minError) minError = thisError;
             }
 
             //consensusSet: Candidato a diventare migliorConsensusSet
@@ -464,11 +465,12 @@ public class Calibrator {
             puntiConensusSet = puntiPerPossibiliInlier;
 
             //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
-            for (int k = 0, j = 0; k < numVisiblePoints-puntiPerPossibiliInlier; k++){
+            for (int k = 0, j = 0; k < numVisiblePoints; k++){
                 //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
                     //Punto presente in possibiliInlier: skip
                     j++;
+                    continue;
                 }
 
                 //Punto non presente: calcolo l'errore quadratico
@@ -477,10 +479,12 @@ public class Calibrator {
                 //Differenze tra scale factor
                 //double squareError = Math.pow(possibileScaleFactor - foreignObj.scaleFactor, 2);
                 //Differenze tra distanza predetta scalata e distanza arcore
-                double squareError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
+                double thisError = Math.pow(foreignObj.predictedDistance * possibileScaleFactor - foreignObj.distance, 2);
+
+                double normalizedError = (thisError - minError) / (maxError-minError);
 
                 //Se l'errore è minore del threshold aggiungo il punto
-                if(squareError < mseThreshold){
+                if(normalizedError < normalizedThreshold){
                     consensusSet[puntiConensusSet++] = k;
 
                     //Aggiorno le somme, MA NON maxSquareError:
@@ -490,33 +494,11 @@ public class Calibrator {
             }
 
             //Se ho un numero sufficiente di punti allora il modello è buono
-            if(puntiConensusSet >= puntiPerMigliorConsensusSet){
+            if(puntiConensusSet >= migliorConsensusSet.length){
                 //Ricalcolo possibleScaleFactor
-                possibileScaleFactor = sumScaleFactors / sumConfidence;
-
-                //Calcolo l'errore quadratico medio
-                double mse = 0.0;
-
-                //Si potrebbe far pesare una possibile confidenza di stima qui:
-                //Media pesata negata: più bassa la confidenza, maggiore il peso dell'errore.
-                double sumEstimationConfidence = 0.0;
-
-                for(int j = 0; j < puntiConensusSet; j++){
-                    RansacObject nextObj = ransacObjects[consensusSet[j]];
-                    //Differenze tra scale factor
-                    //mse += Math.pow(possibileScaleFactor - nextObj.scaleFactor, 2) * 1;
-                    //Differenze tra distanza predetta scalata e distanza arcore
-                    mse += Math.pow(nextObj.predictedDistance * possibileScaleFactor - nextObj.distance, 2) * 1;
-                    sumEstimationConfidence +=1;
-                }
-                mse /= sumEstimationConfidence;
-
-                //Se l'errore è migliore allora consensusSet diventa migliorConsensusSet
-                if(mse < migliorMSE){
-                    migliorConsensusSet = consensusSet;
-                    migliorScaleFactor = possibileScaleFactor;
-                    migliorMSE = mse;
-                }
+                migliorScaleFactorAverage = sumScaleFactors / sumConfidence;
+                migliorScaleFactor = possibileScaleFactor;
+                migliorConsensusSet = Arrays.copyOfRange(consensusSet, 0, puntiConensusSet);
             }
         }
 
@@ -525,8 +507,7 @@ public class Calibrator {
             Log.log(Level.INFO, "Invalid scale factor. Set: "+scaleFactor);
             return false;
         }else{
-            scaleFactor = migliorScaleFactor;
-            bestMSE = migliorMSE;
+            scaleFactor = migliorScaleFactorAverage;
             return true;
         }
     }

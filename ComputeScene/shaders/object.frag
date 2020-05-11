@@ -61,12 +61,9 @@ void main() {
         }
     }
 
-    // We support approximate sRGB gamma.
-    const float kGamma = 0.4545454;
-
     // Flip the y-texture coordinate to address the texture from top-left.
     vec4 tmp = texture2D(u_texture, vec2(v_texCoord.x, 1.0 - v_texCoord.y));
-    vec4 objectColor = vec4(tmp.r, tmp.g, tmp.b, 1.0);
+    vec4 objectColor = vec4(tmp.b, tmp.g, tmp.r, 1.0);
 
     // Apply color to grayscale image only if the alpha of u_ObjColor is
     // greater and equal to 255.0.
