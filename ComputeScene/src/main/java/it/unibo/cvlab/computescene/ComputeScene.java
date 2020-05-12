@@ -65,8 +65,9 @@ public class ComputeScene {
     private ScreenshotRenderer.ColorType colorType;
 
     private ColorMapper colorMapper;
+    private boolean attivaOMA;
 
-    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model,ScreenshotRenderer.ColorType colorType) {
+    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
         this.objectRenderers = new ObjectRenderer[objects.length];
@@ -74,6 +75,7 @@ public class ComputeScene {
         this.model = model;
         this.colorType = colorType;
         this.colorMapper = new ColorMapper(model.getPlasmaFactor(), 4);
+        this.attivaOMA = attivaOMA;
 
         //Inizializzazione rendering oggetti: imposto già il delta e lo scale factor dell'oggetto.
         for (int i = 0; i < objects.length; i++) {
@@ -194,7 +196,14 @@ public class ComputeScene {
                 BufferedImage image = datasetLoader.getImage();
                 SceneDataset sceneDataset = datasetLoader.parseSceneDataset();
                 PointCloudDataset pointCloudDataset = datasetLoader.parsePointDataset();
-                draw(image, sceneDataset, pointCloudDataset, datasetLoader.currentFrame());
+
+                if(attivaOMA){
+                    drawOMA(image, sceneDataset, pointCloudDataset, datasetLoader.currentFrame());
+                }else{
+                    drawNoOMA(image, sceneDataset, pointCloudDataset, datasetLoader.currentFrame());
+                }
+
+
             } catch (IOException e) {
                 Log.log(Level.SEVERE, "Impossibile eseguire draw: "+e.getLocalizedMessage());
             }
@@ -230,7 +239,37 @@ public class ComputeScene {
 
     }
 
-    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
+    private void drawNoOMA(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
+        System.out.println("Frame corrente:"+currentFrame);
+
+        //Imposto l'immagine di sfondo
+        backgroundRenderer.loadBackgroudImage(backgroudImage);
+
+        //Disegno lo sfondo.
+        backgroundRenderer.draw();
+
+        for (int i = 0; i < objectRenderers.length; i++) {
+            objectRenderers[i].setMaskEnabled(false);
+            objectRenderers[i].setCameraPose(sceneDataset.getCameraPose());
+        }
+
+        Pose[] ancore = sceneDataset.getAncore();
+
+        int i = 0;
+
+        for (Pose ancora : ancore){
+            objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
+            objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
+            objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            i++;
+        }
+
+        //Salvo il rendering
+        ByteBuffer pixelsBufferNoOMA = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
+        saver.saveNoOMA(currentFrame, pixelsBufferNoOMA, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
+    }
+
+    private void drawOMA(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
         System.out.println("Frame corrente:"+currentFrame);
 
         //Binding dell'inference renderer
@@ -307,8 +346,8 @@ public class ComputeScene {
         }
 
         //Salvo il rendering
-        ByteBuffer pixelsBuffer = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
-        saver.saveOMA(currentFrame, pixelsBuffer, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
+        ByteBuffer pixelsBufferOMA = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
+        saver.saveOMA(currentFrame, pixelsBufferOMA, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
     }
 
     private static <T> T requestInput(T[] objs, BufferedReader inReader) throws IOException {
@@ -389,13 +428,26 @@ public class ComputeScene {
 
         System.out.println("Numero frames: "+datasetLoader.getFrames());
 
+        //Richiesta attivazione OMA
+
+
+        System.out.println("Attivo OMA? (Y/n)");
+        String attivaOMAString = inReader.readLine();
+
+        if(attivaOMAString == null){
+            System.exit(0);
+        }
+
+        attivaOMAString = attivaOMAString.toLowerCase();
+        boolean attivaOMA = attivaOMAString.equals("") || attivaOMAString.equals("y");
+
+
         System.out.println("Configurazione completata.");
         System.out.println("Procedo alla post-produzione delle immagini (cartella oma)");
         System.out.println("Salvo anche una versione depth (cartella depth)");
 
         //Passo all'app datasetLoader, modello, oggetto e texture
-
-        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType);
+        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType, attivaOMA);
 
         System.out.println("Precaricamento...");
         computeScene.load();

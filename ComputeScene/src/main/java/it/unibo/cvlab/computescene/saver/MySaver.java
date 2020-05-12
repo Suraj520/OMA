@@ -15,6 +15,7 @@ public class MySaver {
     private Path depthPath;
     private Path scaledDepthPath;
     private Path omaPath;
+    private Path noOmaPath;
 
     public MySaver(Path datasetPath, String modelName) {
         this.datasetPath = datasetPath;
@@ -22,6 +23,7 @@ public class MySaver {
         this.depthPath = this.resultsPath.resolve(modelName).resolve("depth");
         this.scaledDepthPath = this.resultsPath.resolve(modelName).resolve("scaledDepth");
         this.omaPath = this.resultsPath.resolve(modelName).resolve("oma");
+        this.noOmaPath = this.resultsPath.resolve(modelName).resolve("noOma");
     }
 
     public void mkdir() throws IOException {
@@ -36,6 +38,9 @@ public class MySaver {
 
         if(!Files.isDirectory(omaPath))
             Files.createDirectories(omaPath);
+
+        if(!Files.isDirectory(noOmaPath))
+            Files.createDirectories(noOmaPath);
     }
 
     public void printPaths(){
@@ -43,6 +48,7 @@ public class MySaver {
         System.out.println("Depth path: " + depthPath);
         System.out.println("ScaledDepth path: "+depthPath);
         System.out.println("OMA path: "+omaPath);
+        System.out.println("NO OMA path: "+noOmaPath);
     }
 
     public Path getDatasetPath() {
@@ -63,6 +69,36 @@ public class MySaver {
 
     public Path getOmaPath() {
         return omaPath;
+    }
+
+    public Path getNoOmaPath() {
+        return noOmaPath;
+    }
+
+    public void saveNoOMA(String name, ByteBuffer buffer, int width, int height, int imageType, int bpp) throws IOException {
+        BufferedImage screenshot = new BufferedImage(width, height, imageType);
+
+        for(int x = 0; x < width; x++)
+        {
+            for(int y = 0; y < height; y++)
+            {
+                int i = (x + (width * y)) * bpp;
+                int r = buffer.get(i) & 0xFF;
+                int g = buffer.get(i + 1) & 0xFF;
+                int b = buffer.get(i + 2) & 0xFF;
+                screenshot.setRGB(x, height - (y + 1), (0xFF << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        saveNoOMA(name, screenshot);
+    }
+
+    public void saveNoOMA(long counter, ByteBuffer buffer, int width, int height, int imageType, int bpp) throws IOException {
+        saveNoOMA(Long.toString(counter), buffer, width, height, imageType, bpp);
+    }
+
+    public void saveNoOMA(String name, BufferedImage image) throws IOException {
+        save(name, noOmaPath, image);
     }
 
     public void saveOMA(String name, ByteBuffer buffer, int width, int height, int imageType, int bpp) throws IOException {
