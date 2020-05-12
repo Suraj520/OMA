@@ -7,6 +7,7 @@ import com.google.gson.annotations.SerializedName;
 import de.javagl.obj.Obj;
 import de.javagl.obj.ObjReader;
 import de.javagl.obj.ObjUtils;
+import de.matthiasmann.twl.utils.PNGDecoder;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -47,7 +48,7 @@ public class ObjectLoader {
         private float delta;
 
         private Obj obj;
-        private BufferedImage texture;
+        private PNGDecoder texture;
 
         public Object(String name, String objName, String textureName, float scaleFactor, float delta) {
             this.name = name;
@@ -81,7 +82,7 @@ public class ObjectLoader {
             return obj;
         }
 
-        public BufferedImage getTexture() {
+        public PNGDecoder getTexture() {
             return texture;
         }
 
@@ -89,7 +90,7 @@ public class ObjectLoader {
             this.obj = obj;
         }
 
-        private void setTexture(BufferedImage texture) {
+        private void setTexture(PNGDecoder texture) {
             this.texture = texture;
         }
     }
@@ -138,10 +139,11 @@ public class ObjectLoader {
         throw new IllegalArgumentException("Obj path non presente nel set");
     }
 
-    private BufferedImage getTexture(Object object) throws IOException {
+    private PNGDecoder getTexture(Object object) throws IOException {
         Path texturePath = objsDirPath.resolve(object.getTextureName());
         if(Files.exists(texturePath)){
-            return ImageIO.read(texturePath.toFile());
+            PNGDecoder decoder = new PNGDecoder(Files.newInputStream(texturePath));
+            return decoder;
         }
         throw new IllegalArgumentException("Texture path non presente nel set");
     }

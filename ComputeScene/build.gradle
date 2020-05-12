@@ -54,6 +54,8 @@ dependencies {
     // https://github.com/javagl/Obj
     implementation 'de.javagl:obj:0.2.1'
 
+    // https://mvnrepository.com/artifact/org.l33tlabs.twl/pngdecoder
+    compile group: 'org.l33tlabs.twl', name: 'pngdecoder', version: '1.0'
 
 
 }

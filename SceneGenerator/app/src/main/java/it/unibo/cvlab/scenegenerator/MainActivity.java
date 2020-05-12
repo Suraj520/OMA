@@ -108,6 +108,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private final ObjectRenderer objectRenderer = new ObjectRenderer();
 
     private boolean recordOn = false;
+    private boolean isSavingFrame = false;
 
     private int surfaceWidth, surfaceHeight;
 
@@ -123,8 +124,6 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private long lastTimestamp = 0;
 
     private String datasetIdentifier;
-
-    private int fileNameCounter;
 
     //Usato per far girare il salvataggio dell'immagine in un altro thread.
     private Handler handler;
@@ -157,6 +156,20 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         optionsMenu.findItem(R.id.toggle_record).setIcon(recordOn ? R.drawable.ic_stop : R.drawable.ic_record);
 
         optionsToolbar.setOnMenuItemClickListener(item -> {
+            if(item.getItemId() == R.id.reset){
+
+                anchors.clear();
+
+                if (session != null) {
+                    onSessionPause();
+                    session.close();
+                    session = null;
+                    onSessionResume();
+                }
+
+                return true;
+            }
+
             if (item.getItemId() == R.id.toggle_record) {
                 //Posso avviare la registrazione se ho archiviazione disponibile
                 if(!isExternalStorageAvailable() || isExternalStorageReadOnly()){
@@ -164,7 +177,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 }
 
                 //Posso avviare la registrazione solo se ho dei piani su cui agganciare ancore.
-                if(!hasTrackingPlane()){
+                if(!hasTrackingPlane() || anchors.isEmpty()){
                     recordOn = false;
                 }
 
@@ -176,7 +189,6 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                         SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyyy_HHmmss", Locale.getDefault());
                         datasetIdentifier = sdf.format(new Date());
                         //Resetto il contatore.
-                        fileNameCounter = 0;
                         frameCounter = 0;
                         recordOn = true;
                     }
@@ -450,13 +462,14 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             }
 
             //Salvataggio del frame
-            if(recordOn){
-
+            if(recordOn && !isSavingFrame){
+                isSavingFrame = true;
                 PointCloudDataset pointCloudDataset;
 
                 try (PointCloud pointCloud = frame.acquirePointCloud()) {
                     if (pointCloud.getTimestamp() == lastTimestamp) {
                         // Redundant call.
+                        isSavingFrame = false;
                         return;
                     }
 
@@ -464,6 +477,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
                     if(numPoints < 1){
                         //Non ho abbastanza punti
+                        isSavingFrame = false;
                         return;
                     }
 
@@ -473,21 +487,22 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 }
 
                 final PointCloudDataset pointCloudDatasetFinal = pointCloudDataset;
+                final long frameNumber = frameCounter;
 
-                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, viewmtx, projmtx, anchors, frameCounter, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
+                final SceneDataset dataset = SceneDataset.parseDataset(frame.getAndroidSensorPose(), camera, viewmtx, projmtx, anchors, frameNumber, System.currentTimeMillis(), screenshotRenderer.getScaledWidth(), screenshotRenderer.getScaledHeight(), NEAR_PLANE, FAR_PLANE);
                 dataset.setDisplayRotation(displayRotationHelper.getDisplayRotation());
 
                 final ByteBuffer data = screenshotRenderer.getByteBufferScreenshot().duplicate();
 
                 if(data.limit() > 0){
-//                    runInBackground(()->{
+                    runInBackground(()->{
                         if(recordOn){
-                            savePointCloud(pointCloudDatasetFinal);
-                            saveScene(dataset);
-                            savePicture(data);
-                            fileNameCounter++;
+                            savePointCloud(pointCloudDatasetFinal, frameNumber);
+                            saveScene(dataset, frameNumber);
+                            savePicture(data, frameNumber);
                         }
-//                    });
+                        isSavingFrame = false;
+                    });
                 }
             }
         } catch (Throwable t) {
@@ -595,7 +610,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     /**
      * Call from the GLThread to save a picture of the current frame.
      */
-    public void savePicture(final ByteBuffer image) {
+    public void savePicture(final ByteBuffer image, long fileNameCounter) {
         final File outPicture = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + imagesPathString), fileNameCounter + ".jpg");
 
         // Make sure the directory exists
@@ -624,7 +639,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         }
     }
 
-    public void saveScene(final SceneDataset dataset){
+    public void saveScene(final SceneDataset dataset, long fileNameCounter){
         final File outDataset = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + scenesPathString) , fileNameCounter + ".json");
 
         File parentFile = outDataset.getParentFile();
@@ -652,7 +667,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     }
 
 
-    public void savePointCloud(final PointCloudDataset dataset){
+    public void savePointCloud(final PointCloudDataset dataset, long fileNameCounter){
         final File outPointCloud = new File(getExternalFilesDir(datasetPathString + datasetIdentifier + pointsPathString) , fileNameCounter + ".json");
 
         File parentFile = outPointCloud.getParentFile();

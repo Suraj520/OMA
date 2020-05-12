@@ -3,8 +3,10 @@ package it.unibo.cvlab.computescene.rendering;
 import android.opengl.Matrix;
 import de.javagl.obj.Obj;
 import de.javagl.obj.ObjData;
+import de.matthiasmann.twl.utils.PNGDecoder;
 import it.unibo.cvlab.computescene.dataset.Pose;
 import org.lwjgl.opengl.GL30;
+import sun.awt.image.PNGImageDecoder;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -113,7 +115,7 @@ public class ObjectRenderer {
     /**
      * Creates and initializes OpenGL resources needed for rendering the model.
      */
-    public void createOnGlThread(Obj obj, BufferedImage textureImage)
+    public void createOnGlThread(Obj obj, PNGDecoder textureImage)
             throws IOException {
         final int vertexShader =
                 ShaderUtil.loadGLShader(TAG, GL30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
@@ -356,18 +358,18 @@ public class ObjectRenderer {
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
     }
 
-    public void loadTextureImage(BufferedImage image){
-        loadTexture(image, getTextureId(), GL30.GL_TEXTURE0);
+    public void loadTextureImage(PNGDecoder textureImage) throws IOException {
+        loadTexture(textureImage, getTextureId(), GL30.GL_TEXTURE0);
     }
 
     /**
      * Carica un immagine in una texture openGL.
      *
-     * @param image immagine bitmap da caricare
+     * @param decoder immagine PNG
      * @param textureId bind della texture openGL
      * @param activeTexture bind della texture attiva openGL
      */
-    private void loadTexture(BufferedImage image, int textureId, int activeTexture){
+    private void loadTexture(PNGDecoder decoder, int textureId, int activeTexture) throws IOException {
         int textureTarget = GL30.GL_TEXTURE_2D;
 
         GL30.glActiveTexture(activeTexture);
@@ -376,11 +378,20 @@ public class ObjectRenderer {
         //non si capisce se RGBA o ARGB
         //Lo caccio così
         //Altrimenti nello shader inverto i colori.
-        int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+        //int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
 
-        //TODO: Rivedi http://forum.lwjgl.org/index.php?topic=5559.0
+        //https://stackoverflow.com/questions/41901468/load-a-texture-within-opengl-and-lwjgl3-in-java/41902221
 
-        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, image.getWidth(), image.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, rgb);
+        //create a byte buffer big enough to store RGBA values
+        ByteBuffer buffer = ByteBuffer.allocateDirect(4 * decoder.getWidth() * decoder.getHeight());
+
+        //decode
+        decoder.decode(buffer, decoder.getWidth() * 4, PNGDecoder.Format.RGBA);
+
+        //flip the buffer so its ready to read
+        buffer.flip();
+
+        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, decoder.getWidth(), decoder.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, buffer);
 
         GL30.glBindTexture(textureTarget, 0);
 

@@ -10,5 +10,6 @@
     <string name="images_path">/images/</string>
     <string name="scenes_path">/scenes/</string>
     <string name="points_path">/points/</string>
+    <string name="reset">Reset</string>
 
 </resources>

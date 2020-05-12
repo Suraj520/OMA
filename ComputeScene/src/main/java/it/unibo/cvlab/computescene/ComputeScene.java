@@ -194,7 +194,7 @@ public class ComputeScene {
                 BufferedImage image = datasetLoader.getImage();
                 SceneDataset sceneDataset = datasetLoader.parseSceneDataset();
                 PointCloudDataset pointCloudDataset = datasetLoader.parsePointDataset();
-                draw(image, sceneDataset, pointCloudDataset);
+                draw(image, sceneDataset, pointCloudDataset, datasetLoader.currentFrame());
             } catch (IOException e) {
                 Log.log(Level.SEVERE, "Impossibile eseguire draw: "+e.getLocalizedMessage());
             }
@@ -230,8 +230,8 @@ public class ComputeScene {
 
     }
 
-    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset) throws IOException {
-        System.out.println("Frame corrente:"+sceneDataset.getFrameNumber());
+    private void draw(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
+        System.out.println("Frame corrente:"+currentFrame);
 
         //Binding dell'inference renderer
         inferenceRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
@@ -275,7 +275,7 @@ public class ComputeScene {
 
         //Salvo il depth
         BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
-        saver.saveDepth(sceneDataset.getFrameNumber(), colorMap);
+        saver.saveDepth(currentFrame, colorMap);
 
         for (int i = 0; i < objectRenderers.length; i++) {
             objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
@@ -293,6 +293,8 @@ public class ComputeScene {
             calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
         }
 
+        calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", NP: "+calibrator.getNumVisiblePoints());
 
         int i = 0;
@@ -306,7 +308,7 @@ public class ComputeScene {
 
         //Salvo il rendering
         ByteBuffer pixelsBuffer = screenshotRenderer.getByteBufferScreenshot(screenshotRenderer.getDefaultFrameBuffer());
-        saver.saveOMA(sceneDataset.getFrameNumber(), pixelsBuffer, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
+        saver.saveOMA(currentFrame, pixelsBuffer, surfaceWidth, surfaceHeight, BufferedImage.TYPE_INT_RGB, screenshotRenderer.getColorType().getByteSize());
     }
 
     private static <T> T requestInput(T[] objs, BufferedReader inReader) throws IOException {
