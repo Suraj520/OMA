@@ -56,6 +56,12 @@ public class Calibrator {
         return numVisiblePoints;
     }
 
+    private int numUsedPoints;
+
+    public int getNumUsedPoints() {
+        return numUsedPoints;
+    }
+
     private final double defaultScaleFactor;
     private double scaleFactor;
 
@@ -246,6 +252,7 @@ public class Calibrator {
 
         if (!Double.isNaN(sumScaleFactor)) {
             scaleFactor = sumScaleFactor / sumWeight;
+            numUsedPoints = numVisiblePoints;
             Log.log(Level.INFO, "Scale factor: "+scaleFactor);
             return true;
         } else {
@@ -508,6 +515,7 @@ public class Calibrator {
             return false;
         }else{
             scaleFactor = migliorScaleFactorAverage;
+            numUsedPoints = migliorConsensusSet.length;
             return true;
         }
     }

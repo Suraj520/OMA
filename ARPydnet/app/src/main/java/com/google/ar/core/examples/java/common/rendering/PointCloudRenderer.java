@@ -24,7 +24,7 @@ import java.nio.FloatBuffer;
 
 /** Renders a point cloud. */
 public class PointCloudRenderer {
-    private static final String TAG = PointCloud.class.getSimpleName();
+    private static final String TAG = PointCloudRenderer.class.getSimpleName();
 
     // Shader names.
     private static final String VERTEX_SHADER_NAME = "shaders/point_cloud.vert";

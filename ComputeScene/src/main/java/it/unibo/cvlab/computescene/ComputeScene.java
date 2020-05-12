@@ -1,6 +1,5 @@
 package it.unibo.cvlab.computescene;
 
-import de.javagl.obj.Obj;
 import it.unibo.cvlab.computescene.dataset.PointCloudDataset;
 import it.unibo.cvlab.computescene.dataset.Pose;
 import it.unibo.cvlab.computescene.dataset.SceneDataset;
@@ -10,6 +9,7 @@ import it.unibo.cvlab.computescene.loader.ObjectLoader;
 import it.unibo.cvlab.computescene.model.Model;
 import it.unibo.cvlab.computescene.rendering.BackgroundRenderer;
 import it.unibo.cvlab.computescene.rendering.ObjectRenderer;
+import it.unibo.cvlab.computescene.rendering.PointCloudRenderer;
 import it.unibo.cvlab.computescene.rendering.ScreenshotRenderer;
 import it.unibo.cvlab.computescene.saver.MySaver;
 import org.lwjgl.Version;
@@ -31,7 +31,6 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,6 +48,7 @@ public class ComputeScene {
     private int surfaceWidth, surfaceHeight;
     private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
     private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
+    private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
     private final ScreenshotRenderer inferenceRenderer = new ScreenshotRenderer();
 
     private ObjectRenderer[] objectRenderers;
@@ -66,8 +66,9 @@ public class ComputeScene {
 
     private ColorMapper colorMapper;
     private boolean attivaOMA;
+    private boolean attivaRPC;
 
-    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA) {
+    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
         this.objectRenderers = new ObjectRenderer[objects.length];
@@ -76,6 +77,7 @@ public class ComputeScene {
         this.colorType = colorType;
         this.colorMapper = new ColorMapper(model.getPlasmaFactor(), 4);
         this.attivaOMA = attivaOMA;
+        this.attivaRPC = attivaRPC;
 
         //Inizializzazione rendering oggetti: imposto già il delta e lo scale factor dell'oggetto.
         for (int i = 0; i < objects.length; i++) {
@@ -229,6 +231,7 @@ public class ComputeScene {
             backgroundRenderer.createOnGlThread(surfaceWidth, surfaceHeight);
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
             inferenceRenderer.createOnGlThread(colorType, surfaceWidth, surfaceHeight, model.getInputWidth(), model.getInputHeight());
+            pointCloudRenderer.createOnGlThread();
 
             for (int i = 0; i < objectRenderers.length; i++) {
                 objectRenderers[i].createOnGlThread(objects[i].getObj(), objects[i].getTexture());
@@ -262,6 +265,12 @@ public class ComputeScene {
             objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
             objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;
+        }
+
+        //Disegno i punti del cloud se richiesti
+        if(attivaRPC){
+            pointCloudRenderer.update(pointDataset.getPoints());
+            pointCloudRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
         }
 
         //Salvo il rendering
@@ -326,15 +335,13 @@ public class ComputeScene {
 
         Pose[] ancore = sceneDataset.getAncore();
 
-        if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.2f))
+        if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f))
         {
             //Calibrazione con RANSAC fallita: provo con media ponderata
             calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
         }
 
-        calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
-
-        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", NP: "+calibrator.getNumVisiblePoints());
+        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
 
         int i = 0;
 
@@ -343,6 +350,12 @@ public class ComputeScene {
             objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
             objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;
+        }
+
+        //Disegno i punti del cloud se richiesti
+        if(attivaRPC){
+            pointCloudRenderer.update(pointDataset.getPoints());
+            pointCloudRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
         }
 
         //Salvo il rendering
@@ -429,8 +442,6 @@ public class ComputeScene {
         System.out.println("Numero frames: "+datasetLoader.getFrames());
 
         //Richiesta attivazione OMA
-
-
         System.out.println("Attivo OMA? (Y/n)");
         String attivaOMAString = inReader.readLine();
 
@@ -441,13 +452,23 @@ public class ComputeScene {
         attivaOMAString = attivaOMAString.toLowerCase();
         boolean attivaOMA = attivaOMAString.equals("") || attivaOMAString.equals("y");
 
+        //Richiesta attivazione OMA
+        System.out.println("Attivo Rendering PointCloud? (Y/n)");
+        String attivaRPCString = inReader.readLine();
+
+        if(attivaRPCString == null){
+            System.exit(0);
+        }
+
+        attivaRPCString = attivaRPCString.toLowerCase();
+        boolean attivaRPC = attivaRPCString.equals("") || attivaRPCString.equals("y");
 
         System.out.println("Configurazione completata.");
         System.out.println("Procedo alla post-produzione delle immagini (cartella oma)");
         System.out.println("Salvo anche una versione depth (cartella depth)");
 
         //Passo all'app datasetLoader, modello, oggetto e texture
-        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType, attivaOMA);
+        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType, attivaOMA, attivaRPC);
 
         System.out.println("Precaricamento...");
         computeScene.load();
