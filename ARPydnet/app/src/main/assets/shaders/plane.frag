@@ -44,6 +44,7 @@ varying vec3 v_texCoordAlpha;
 varying vec3 v_worldPos;
 uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
+uniform float u_shiftFactor;
 uniform float u_screenOrientation;
 
 void main() {
@@ -86,7 +87,7 @@ void main() {
         float predictedDistance =  inferenceVector.r;
         predictedDistance = predictedDistance / u_maxPredictedDistance;
         predictedDistance = 1.0 / predictedDistance;
-        predictedDistance = predictedDistance * u_scaleFactor;
+        predictedDistance = predictedDistance * u_scaleFactor + u_shiftFactor;
 
         //float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
 

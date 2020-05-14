@@ -56,7 +56,7 @@ public class Model {
         LINEAR,
         @SerializedName("exp")
         EXPONENTIAL,
-        @SerializedName("linearInverse")
+        @SerializedName("linearNegate")
         LINEAR_NEGATE,
         @SerializedName("expInverse")
         EXPONENTIAL_NEGATE,;
@@ -81,17 +81,19 @@ public class Model {
 
     public static FloatBuffer inverse(FloatBuffer in){
         float[] minMaxOfBuffer = getMinMaxOfBuffer(in);
-        return inverse(in, minMaxOfBuffer[1]);
+        return inverse(in, minMaxOfBuffer[0], minMaxOfBuffer[1]);
     }
 
-    public static FloatBuffer inverse(FloatBuffer in,  float max){
+    public static FloatBuffer inverse(FloatBuffer in, float min, float max){
         FloatBuffer out = FloatBuffer.allocate(in.capacity());
 
         in.rewind();
 
+        float range = max-min;
+
         while(in.hasRemaining()){
             float pred = in.get();
-            pred = pred / max;
+            pred = (pred-min) / range;
             out.put(1.0f/pred);
         }
 
@@ -498,7 +500,7 @@ public class Model {
                 return in;
             case INVERSE:
                 if(isOutputMinMaxValid())
-                    return inverse(in, getOutputMax());
+                    return inverse(in, getOutputMin(), getOutputMax());
                 return inverse(in);
             case NEGATE:
                 if(isOutputMinMaxValid())

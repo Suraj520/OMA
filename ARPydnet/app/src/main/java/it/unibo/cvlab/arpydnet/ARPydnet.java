@@ -177,12 +177,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean maskEnabled = false;
     private boolean dualScreenMode = false;
     private boolean rainEnabled = false;
-    private boolean useRansac = false;
-
-    private double scaleFactorDifference = 0.0;
-    private double scaleFactorAverageDifference = 0.0;
-    private double scaleFactorDifferenceSum = 0.0;
-    private long scaleFactorDifferenceSumCounter = 0;
+    private boolean advancedCalibrator = false;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
@@ -346,7 +341,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
         optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
         optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
-        optionsMenu.findItem(R.id.toggle_ransac).setIcon(useRansac ? R.drawable.ic_ransac_on : R.drawable.ic_ransac_off);
+        optionsMenu.findItem(R.id.toggle_advanced_calibrator).setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
 
         //Attivo il depth solo se non siamo in dual mode.
         optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
@@ -368,9 +363,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     rainEnabled = !rainEnabled;
                     return true;
 
-                case R.id.toggle_ransac:
-                    useRansac = !useRansac;
-                    item.setIcon(useRansac ? R.drawable.ic_ransac_on : R.drawable.ic_ransac_off);
+                case R.id.toggle_advanced_calibrator:
+                    advancedCalibrator = !advancedCalibrator;
+                    item.setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
                     return true;
 
                 case R.id.toggle_settings:
@@ -714,13 +709,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             // Handle one tap per frame.
             handleTap(frame, camera);
 
-            planeRenderer.setScaleFactor((float) calibrator.getScaleFactor());
             planeRenderer.setCameraPose(cameraPose);
-
-            virtualObject.setScaleFactor((float) calibrator.getScaleFactor());
             virtualObject.setCameraPose(cameraPose);
-
-            virtualObjectShadow.setScaleFactor((float) calibrator.getScaleFactor());
             virtualObjectShadow.setCameraPose(cameraPose);
 
             //Impostazione delle maschere
@@ -816,16 +806,23 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     if(calibrator.isLastTimestampDifferent(pointCloud)){
                         calibrator.calculateMaxEstimationDistance(inference);
 
-                        double scaleFactorWeightedAverage = calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
-
-                        if(useRansac){
-                            double scaleFactorRANSAC = calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 6, 0.2f);
-
-                            scaleFactorDifference = Math.abs(scaleFactorRANSAC-scaleFactorWeightedAverage);
-                            scaleFactorDifferenceSum += scaleFactorDifference;
-                            scaleFactorDifferenceSumCounter++;
-                            scaleFactorAverageDifference = scaleFactorDifferenceSum / scaleFactorDifferenceSumCounter;
+                        if(advancedCalibrator){
+                            if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointCloud, cameraPose)){
+                                if(calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 6, 0.2f)){
+                                    calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
+                                }
+                            }
+                        }else{
+                            calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                         }
+
+                        planeRenderer.setScaleFactor((float) calibrator.getScaleFactor());
+                        virtualObject.setScaleFactor((float) calibrator.getScaleFactor());
+                        virtualObjectShadow.setScaleFactor((float) calibrator.getScaleFactor());
+
+                        planeRenderer.setShiftFactor((float) calibrator.getShiftFactor());
+                        virtualObject.setShiftFactor((float) calibrator.getShiftFactor());
+                        virtualObjectShadow.setShiftFactor((float) calibrator.getShiftFactor());
 
                         virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
@@ -837,7 +834,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
                 //Il numero visible points è indicativo, ci potrebbero essere più punti rispetto
                 //A quelli sullo schermo
-                runOnUiThread(()->setGeneralLogMessage(calibrator.getNumVisiblePoints()));
+                runOnUiThread(this::setGeneralLogMessage);
 
                 pointCloudRenderer.update(pointCloud);
                 pointCloudRenderer.draw(viewmtx, projmtx);
@@ -848,9 +845,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             if (!hasTrackingPlane()) {
                 runOnUiThread(()->showLoadingMessage(R.string.searching_plane_message, Snackbar.LENGTH_INDEFINITE));
                 runOnUiThread(this::setNoLogMessage);
-
-                //Resetto il valore massimo di fattore di scala. La scena è cambiata
-                scaleFactorAverageDifference = 0.0;
             } else {
                 runOnUiThread(this::hideLoadingMessage);
             }
@@ -1002,19 +996,9 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         loadingMessageSnackbar = null;
     }
 
-    private void setGeneralLogMessage(int numPoints){
-        double scaleFactorDifferencePercent = (scaleFactorDifference / calibrator.getScaleFactor()) * 100;
-        double scaleFactorMaxDifferencePercent = (scaleFactorAverageDifference / calibrator.getScaleFactor()) * 100;
-
-        if(useRansac){
-            String text = getString(R.string.log_general_ransac, calibrator.getScaleFactor(), numPoints, calibrator.getBestMSE() * 1000, scaleFactorDifference, scaleFactorDifferencePercent, scaleFactorAverageDifference, scaleFactorMaxDifferencePercent);
-            logTextView.setText(text);
-        }else{
-            String text = getString(R.string.log_general, calibrator.getScaleFactor(), numPoints);
-            logTextView.setText(text);
-        }
-
-
+    private void setGeneralLogMessage(){
+        String text = getString(R.string.log_calibrator, calibrator.getScaleFactor(), calibrator.getShiftFactor(), calibrator.getNumVisiblePoints(), calibrator.getNumUsedPoints());
+        logTextView.setText(text);
     }
 
     private void setNoLogMessage(){

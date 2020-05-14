@@ -64,6 +64,7 @@ public class Calibrator {
 
     private final double defaultScaleFactor;
     private double scaleFactor;
+    private double shiftFactor;
 
     public void setScaleFactor(double scaleFactor) {
         this.scaleFactor = scaleFactor;
@@ -71,6 +72,14 @@ public class Calibrator {
 
     public double getScaleFactor(){
         return scaleFactor;
+    }
+
+    public double getShiftFactor() {
+        return shiftFactor;
+    }
+
+    public void setShiftFactor(double shiftFactor) {
+        this.shiftFactor = shiftFactor;
     }
 
     public Calibrator() {
@@ -246,17 +255,18 @@ public class Calibrator {
                 numVisiblePoints++;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.log(Level.INFO, "Impossibile trovare predizione di calibrazione");
+                Log.log(Level.INFO, "Impossibile trovare corrispondeza punto-depth");
             }
         }
 
         if (!Double.isNaN(sumScaleFactor)) {
             scaleFactor = sumScaleFactor / sumWeight;
+            shiftFactor = 0.0;
             numUsedPoints = numVisiblePoints;
             Log.log(Level.INFO, "Scale factor: "+scaleFactor);
             return true;
         } else {
-            Log.log(Level.INFO, "Invalid scale factor. Ignored");
+            Log.log(Level.INFO, "Weighted average calibrator failed");
             return false;
         }
 
@@ -346,6 +356,7 @@ public class Calibrator {
      * Dovrebbe essere più robusto rispetto al calcolo tramite media
      *
      * @param inference stima di profondità
+     * @param points punti point cloud da usare come ground-truth
      * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
      * @param normalizedThreshold valore di soglia tra 0.0 e 1.0
      * @return fattore di scala trovato tramite RANSAC
@@ -392,7 +403,7 @@ public class Calibrator {
                 numVisiblePoints++;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.log(Level.INFO, "Impossibile trovare predizione di calibrazione");
+                Log.log(Level.INFO, "Impossibile trovare corrispondeza punto-depth");
             }
         }
 
@@ -510,14 +521,137 @@ public class Calibrator {
         }
 
         //Salvo il nuovo valore.
-        if(Double.isNaN(migliorScaleFactor)){
-            Log.log(Level.INFO, "Invalid scale factor. Set: "+scaleFactor);
+        if(Double.isNaN(migliorScaleFactorAverage)){
+            Log.log(Level.INFO, "RANSAC calibrator failed");
             return false;
         }else{
             scaleFactor = migliorScaleFactorAverage;
+            shiftFactor = 0.0;
             numUsedPoints = migliorConsensusSet.length;
             return true;
         }
+    }
+
+    private static class MinimumSquareObject {
+        double distance;
+        double disparityDistance;
+        double predictedDistance;
+        double predictedDistanceSquare;
+        double arConfidence;
+
+        private void calculate(){
+            this.predictedDistanceSquare = predictedDistance * predictedDistance;
+            this.disparityDistance = 1.0 / distance;
+        }
+    }
+
+    //https://gist.github.com/ranftlr/a1c7a24ebb24ce0e2f2ace5bce917022
+
+    /**
+     * Calcola il fattore di scala tramite algoritmo quadrati minimi.
+     *
+     * @param inference stima di profondità
+     * @param points punti point cloud da usare come ground-truth
+     *
+     * @return fattore di scala trovato tramite quadrati minimi
+     */
+    public boolean calibrateScaleFactorQuadratiMinimi(FloatBuffer inference, Point[] points){
+        numVisiblePoints = 0;
+
+        int numPoints = points.length;
+
+        //Check sul numero minimo di punti
+        if(numPoints < 1) return false;
+
+        MinimumSquareObject[] minimumSquareObjects = new MinimumSquareObject[numPoints];
+
+        //Calcolo di ogni singolo scaleFactor O(N)
+        for (Point point : points){
+            if(point == null) continue;
+
+            if(point.getConfidence() < 0.3f) continue;
+
+            int[] coords = getXYFromPoint(point);
+
+            if(coords == null){
+                //Punto non valido continuo con il prossimo
+                continue;
+            }
+
+            int position = (width * coords[1]) + coords[0];
+
+            inference.rewind();
+
+            if(inference.remaining() >= position){
+                //Ricavo la distanza.
+                double distance = getDistance(point);
+
+                //Ricavo la distanza pydnet.
+                float predictedDistance = inference.get(position);
+
+                minimumSquareObjects[numVisiblePoints] = new MinimumSquareObject();
+                minimumSquareObjects[numVisiblePoints].distance = distance;
+                minimumSquareObjects[numVisiblePoints].predictedDistance = predictedDistance;
+                minimumSquareObjects[numVisiblePoints].arConfidence = point.getConfidence();
+                minimumSquareObjects[numVisiblePoints].calculate();
+                numVisiblePoints++;
+            }else{
+                //Stranamente non riesco a trovare la predizione.
+                Log.log(Level.INFO, "Impossibile trovare corrispondeza punto-depth");
+            }
+        }
+
+        //Numero di punti non sufficiente
+        if(numVisiblePoints < 1) return false;
+
+        //Algoritmo quadrati minimi
+        //compute_scale_and_shift()
+
+        //Matrice A = [[a_00, a_01], [a_10, a_11]]
+        //a_01 = a_10
+        //Array B = [b_0, b_1]
+
+        double a00 = 0.0;
+        double a01 = 0.0;
+        double a11 = numVisiblePoints;
+
+        //IL fattore a10 è uguale a a01
+
+        double b0 = 0.0;
+        double b1 = 0.0;
+
+        for(int i = 0; i<numVisiblePoints;i++){
+            a00 += minimumSquareObjects[i].predictedDistanceSquare;
+            a01 += minimumSquareObjects[i].predictedDistance;
+            b0 += minimumSquareObjects[i].predictedDistance * minimumSquareObjects[i].distance;
+            b1 += minimumSquareObjects[i].distance;
+        }
+
+        //Calcolo il determinante di A
+        double detA = a00 * a11 - a01 * a01;
+
+        //Mi serve un determinante strettamente positivo
+        if(detA > 0.0){
+
+            double scaleFactor = (a11*b0-a01*b1)/detA;
+            double shift = (-a01*b0+a00*b1)/detA;
+
+            //Salvo il nuovo valore.
+            if(Double.isNaN(scaleFactor) || Double.isNaN(shift) || scaleFactor < 0.0){
+                Log.log(Level.INFO, "Minimum square calibrator failed");
+                return false;
+            }else{
+                this.scaleFactor = scaleFactor;
+                this.shiftFactor = shift;
+                this.numUsedPoints = numVisiblePoints;
+                return true;
+            }
+        }
+
+        Log.log(Level.INFO, "Invalid detA: "+detA);
+
+        //Determinante non valido: esco
+        return false;
     }
 
 

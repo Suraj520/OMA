@@ -3,8 +3,8 @@
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160406\results\PydnetV3\noOma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 12052020_160406_nooma.avi
  
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160509\results\PydnetV3\depth\%d.jpg -qscale:v 2 -vf "setpts=2*PTS" 12052020_160509_depth.avi
- .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160509\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 12052020_160509_oma.avi
- .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160509\results\PydnetV3\noOma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 12052020_160509_nooma.avi
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160509_reduced\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 12052020_160509_oma.avi
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\12052020_160509_reduced\results\PydnetV3\noOma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 12052020_160509_nooma.avi
  
   .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\Pydnet\depth\%d.jpg -qscale:v 2 -vf "setpts=2*PTS" depth_pydnet.avi
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\06052020_193752\results\Pydnet\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" oma_pydnet.avi

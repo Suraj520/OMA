@@ -33,6 +33,7 @@ uniform vec4 u_objColor;
 varying vec3 v_worldPos;
 uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
+uniform float u_shiftFactor;
 
 void main() {
     if(u_maskEnabled > 0.5){
@@ -47,8 +48,8 @@ void main() {
         texcoord = vec2(texcoord.x, 1.0-texcoord.y);
 
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-        /*float pydnetDistance = exp(inferenceVector.r) * u_scaleFactor;*/
-        float predictedDistance = inferenceVector.r * u_scaleFactor;
+
+        float predictedDistance = inferenceVector.r * u_scaleFactor + u_shiftFactor;
 
         float dx = u_cameraPose.x-v_worldPos.x;
         float dy = u_cameraPose.y-v_worldPos.y;

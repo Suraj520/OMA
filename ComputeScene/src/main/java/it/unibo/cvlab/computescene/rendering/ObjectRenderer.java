@@ -72,6 +72,12 @@ public class ObjectRenderer {
     private int inferenceTextureUniform;
     private int scaleFactorUniform;
     private float scaleFactor;
+    private int shiftFactorUniform;
+    private float shiftFactor;
+
+    public void setShiftFactor(float shiftFactor) {
+        this.shiftFactor = shiftFactor;
+    }
 
     public void setScaleFactor(float scaleFactor) {
         this.scaleFactor = scaleFactor;
@@ -146,6 +152,7 @@ public class ObjectRenderer {
         windowSizeUniform = GL30.glGetUniformLocation(program, "u_windowSize");
 
         scaleFactorUniform = GL30.glGetUniformLocation(program, "u_scaleFactor");
+        shiftFactorUniform = GL30.glGetUniformLocation(program, "u_shiftFactor");
         cameraPoseUniform = GL30.glGetUniformLocation(program, "u_cameraPose");
 
         colorUniform = GL30.glGetUniformLocation(program, "u_objColor");
@@ -291,6 +298,7 @@ public class ObjectRenderer {
         GL30.glUniform4fv(colorUniform, objColor);
 
         GL30.glUniform1f(scaleFactorUniform, scaleFactor);
+        GL30.glUniform1f(shiftFactorUniform, shiftFactor);
         GL30.glUniform3fv(cameraPoseUniform, cameraPose);
 
         // Attach the object texture.

@@ -142,6 +142,12 @@ public class PlaneRenderer {
 
     private int scaleFactorUniform;
     private float scaleFactor;
+    private int shiftFactorUniform;
+    private float shiftFactor;
+
+    public void setShiftFactor(float shiftFactor) {
+        this.shiftFactor = shiftFactor;
+    }
 
     public void setScaleFactor(float scaleFactor) {
         this.scaleFactor = scaleFactor;
@@ -352,6 +358,7 @@ public class PlaneRenderer {
         windowSizeUniform = GLES20.glGetUniformLocation(planeProgram, "u_windowSize");
 
         scaleFactorUniform = GLES20.glGetUniformLocation(planeProgram, "u_scaleFactor");
+        shiftFactorUniform = GLES20.glGetUniformLocation(planeProgram, "u_shiftFactor");
         cameraPoseUniform = GLES20.glGetUniformLocation(planeProgram, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(planeProgram, "u_screenOrientation");
 
@@ -580,6 +587,7 @@ public class PlaneRenderer {
         GLES20.glUniform2f(windowSizeUniform, screenData[2], screenData[3]);
 
         GLES20.glUniform1f(scaleFactorUniform, scaleFactor);
+        GLES20.glUniform1f(shiftFactorUniform, shiftFactor);
         GLES20.glUniform3fv(cameraPoseUniform, 1, this.cameraPose, 0);
 
         // Shared fragment uniforms.

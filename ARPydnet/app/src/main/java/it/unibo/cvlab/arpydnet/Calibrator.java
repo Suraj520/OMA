@@ -76,9 +76,11 @@ public class Calibrator {
     }
 
     private final float defaultScaleFactor;
-    private double scaleFactor;
 
-    public void setScaleFactor(float scaleFactor) {
+    private double scaleFactor;
+    private double shiftFactor;
+
+    public void setScaleFactor(double scaleFactor) {
         this.scaleFactor = scaleFactor;
     }
 
@@ -86,15 +88,18 @@ public class Calibrator {
         return scaleFactor;
     }
 
-    private double bestMSE;
-
-    public double getBestMSE() {
-        return bestMSE;
+    public double getShiftFactor() {
+        return shiftFactor;
     }
 
     private float maxPredictedDistance;
 
     private int numVisiblePoints;
+    private int numUsedPoints;
+
+    public int getNumUsedPoints() {
+        return numUsedPoints;
+    }
 
     public int getNumVisiblePoints() {
         return numVisiblePoints;
@@ -254,7 +259,7 @@ public class Calibrator {
      * della stima.
      * @param inference stima da verificare
      */
-    public float calculateMaxEstimationDistance(FloatBuffer inference){
+    public void calculateMaxEstimationDistance(FloatBuffer inference){
         //Data la continuitò della stima, posso cercare solo nei numeri pari o dispari
 
         float myMaxPredictedDistance = Float.MIN_VALUE;
@@ -275,8 +280,6 @@ public class Calibrator {
         maxPredictedDistance = myMaxPredictedDistance;
 
         inference.rewind();
-
-        return maxPredictedDistance;
     }
 
     /**
@@ -296,83 +299,136 @@ public class Calibrator {
 
     //https://learnopengl.com/Getting-started/Coordinate-Systems
 
-    /**
-     * Calibra lo scale factor da un solo punto di osservazione.
-     * @param inference risultato della pydnet
-     * @param objPose punto dell'oggetto
-     * @param cameraPose Punto della camera in riferimento alla nuvola di punti
-     * @return restituisce lo scaleFactor: se lo scale factor non è calcolabile, restituisce
-     * quello precedente.
-     */
-    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose){
-        int[] xy = getXYFromPoint(objPose.tx(), objPose.ty(), objPose.tz());
+    private static class MinimumSquareObject {
+        double distance;
+        double disparityDistance;
+        double predictedDistance;
+        double predictedDistanceSquare;
+        double arConfidence;
 
-        if(xy == null){
-            //punto non valido
-            return scaleFactor;
+        private void calculate(){
+            this.predictedDistanceSquare = predictedDistance * predictedDistance;
+            this.disparityDistance = 1.0 / distance;
         }
-
-        int position = (resolution.getWidth() * xy[1]) + xy[0];
-
-        inference.rewind();
-
-        if(inference.remaining() >= position){
-            float predictedDistance = inference.get(position);
-
-
-            double myScaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
-
-            if(Double.isNaN(myScaleFactor)){
-                Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
-            }else{
-                scaleFactor = myScaleFactor;
-            }
-        }else{
-            //Stranamente non riesco a trovare la predizione.
-            Log.d(TAG, "Impossibile trovare predizione di calibrazione");
-        }
-
-        return scaleFactor;
     }
 
+    //https://gist.github.com/ranftlr/a1c7a24ebb24ce0e2f2ace5bce917022
+
     /**
-     * Calibra lo scale factor da un solo punto di osservazione.
-     * @param inference risultato della pydnet
-     * @param objPose punto dell'oggetto
-     * @param cameraPose Punto della camera in riferimento alla nuvola di punti
-     * @param rawX 0 <= x < width sullo schermo
-     * @param rawY 0 <= y < height sullo schermo
-     * @return scale factor
+     * Calcola il fattore di scala tramite algoritmo quadrati minimi.
+     *
+     * @param inference stima di profondità
+     * @param cloud point cloud da cui calcolare il fattore di scala
+     * @param cameraPose posa della camera per il calcolo della distanza
+     *
+     * @return fattore di scala trovato tramite quadrati minimi
      */
-    public double calibrateScaleFactor(FloatBuffer inference, Pose objPose, Pose cameraPose,
-                                       int rawX, int rawY){
-        //Origine dei punti Top-left
-        //Devo ricavare i punti relativi
-        float xFloat = (float) rawX/surfaceWidth;
-        float yFloat = (float) rawY/surfaceHeight;
+    public boolean calibrateScaleFactorQuadratiMinimi(FloatBuffer inference, PointCloud cloud,
+                                                      Pose cameraPose){
+        FloatBuffer points = cloud.getPoints();
+        int numPoints = getNumPoints(cloud);
 
-        //Trasformo le coordinate da origine top-left,
-        // in modo che seguano la rotazione dello schermo
-        float[] finalCoords = transformCoordTopLeft(xFloat, yFloat);
+        //Check sul numero minimo di punti
+        if(numPoints < 1) return false;
 
-        //Trasformo le coordinate normalizate in [0,width[, [0.height[
-        int x = Math.round(finalCoords[0] * (resolution.getWidth()-1));
-        int y = Math.round(finalCoords[1] * (resolution.getHeight()-1));
+        MinimumSquareObject[] minimumSquareObjects = new MinimumSquareObject[numPoints];
 
-        int position = (resolution.getWidth() * y) + x;
+        //Vettore con le World-Coords
+        //X,Y,Z,Confidence
+        float[] coords = new float[4];
 
-        inference.rewind();
+        //Calcolo di ogni singolo scaleFactor O(N)
+        for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
+            points.get(coords,0,4);
+            float arConfidence = coords[3];
 
-        if(inference.remaining() >= position){
-            float predictedDistance = inference.get(position);
-            scaleFactor = getDistance(objPose, cameraPose) / predictedDistance;
-        }else{
-            //Stranamente non riesco a trovare la predizione.
-            Log.w(TAG, "Impossibile trovare predizione di calibrazione");
-            scaleFactor = defaultScaleFactor;
+            int[] xy = getXYFromPoint(coords[0], coords[1], coords[2]);
+
+            if(xy == null){
+                numVisiblePoints--;    //Il punto non è valido: non lo conto e prendo il successivo
+                continue;
+            }
+
+            int position = (resolution.getWidth() * xy[1]) + xy[0];
+
+            inference.rewind();
+
+            if(inference.remaining() >= position){
+                //Ricavo la distanza.
+                double distance = getDistance(coords[0], coords[1], coords[2], cameraPose);
+
+                //Ricavo la distanza pydnet.
+                double predictedDistance = inference.get(position);
+                predictedDistance = predictedDistance / maxPredictedDistance;
+                predictedDistance = (float) (1.0 / predictedDistance);
+                //predictedDistance = 255.0f - predictedDistance;
+
+                minimumSquareObjects[numVisiblePoints] = new MinimumSquareObject();
+                minimumSquareObjects[numVisiblePoints].distance = distance;
+                minimumSquareObjects[numVisiblePoints].predictedDistance = predictedDistance;
+                minimumSquareObjects[numVisiblePoints].arConfidence = arConfidence;
+                minimumSquareObjects[numVisiblePoints].calculate();
+            }else{
+                //Stranamente non riesco a trovare la predizione.
+                Log.d(TAG, "Impossibile trovare corrispondeza punto-depth");
+                //Il punto è perso: ripeto con il prossimo.
+                numVisiblePoints--;
+            }
         }
 
-        return scaleFactor;
+        points.rewind();
+
+        //Check sul numero minimo di punti
+        if(numVisiblePoints < 1) return false;
+
+        //Algoritmo quadrati minimi
+        //compute_scale_and_shift()
+
+        //Matrice A = [[a_00, a_01], [a_10, a_11]]
+        //a_01 = a_10
+        //Array B = [b_0, b_1]
+
+        double a00 = 0.0;
+        double a01 = 0.0;
+        double a11 = numVisiblePoints;
+
+        //IL fattore a10 è uguale a a01
+
+        double b0 = 0.0;
+        double b1 = 0.0;
+
+        for(int i = 0; i<numVisiblePoints;i++){
+            a00 += minimumSquareObjects[i].predictedDistanceSquare;
+            a01 += minimumSquareObjects[i].predictedDistance;
+            b0 += minimumSquareObjects[i].predictedDistance * minimumSquareObjects[i].distance;
+            b1 += minimumSquareObjects[i].distance;
+        }
+
+        //Calcolo il determinante di A
+        double detA = a00 * a11 - a01 * a01;
+
+        //Mi serve un determinante strettamente positivo
+        if(detA > 0.0){
+
+            double scaleFactor = (a11*b0-a01*b1)/detA;
+            double shift = (-a01*b0+a00*b1)/detA;
+
+            //Salvo il nuovo valore.
+            if(Double.isNaN(scaleFactor) || Double.isNaN(shift) || scaleFactor < 0.0){
+                Log.d(TAG, "Minimum square calibrator failed");
+                return false;
+            }else{
+                this.scaleFactor = scaleFactor;
+                this.shiftFactor = shift;
+                this.numUsedPoints = numVisiblePoints;
+                return true;
+            }
+        }
+
+        Log.d(TAG, "Invalid detA: "+detA);
+
+        //Determinante non valido: esco
+        return false;
     }
 
     /**
@@ -465,7 +521,7 @@ public class Calibrator {
      * @param normalizedThreshold valore di soglia per accettare nuovi dati nel consensusSet
      * @return fattore di scala trovato tramite RANSAC
      */
-    public double calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud,
+    public boolean calibrateScaleFactorRANSAC(FloatBuffer inference, PointCloud cloud,
                                              Pose cameraPose, int numberOfIterations,
                                              float normalizedThreshold){
         lastTimestamp = cloud.getTimestamp();
@@ -474,7 +530,7 @@ public class Calibrator {
         int numPoints = getNumPoints(cloud);
 
         //Check sul numero minimo di punti
-        if(numPoints < 1) return scaleFactor;
+        if(numPoints < 1) return false;
 
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
@@ -515,7 +571,7 @@ public class Calibrator {
                 ransacObjects[numVisiblePoints].arConfidence = arConfidence;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.d(TAG, "Impossibile trovare predizione di calibrazione");
+                Log.d(TAG, "Impossibile trovare corrispondeza punto-depth");
                 //Il punto è perso: ripeto con il prossimo.
                 numVisiblePoints--;
             }
@@ -524,7 +580,7 @@ public class Calibrator {
         points.rewind();
 
         //Check sul numero minimo di punti
-        if(numVisiblePoints < 1) return scaleFactor;
+        if(numVisiblePoints < 1) return false;
 
         //Sorting per confidenza, decrescente: O(N*log2(N))
         //Non ho scelto parallel perché la lista degli elementi è limitata
@@ -637,12 +693,14 @@ public class Calibrator {
 
         //Salvo il nuovo valore.
         if(Double.isNaN(migliorScaleFactorAverage)){
-            Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
+            Log.d(TAG, "RANSAC calibrator failed");
+            return false;
         }else{
-            scaleFactor = migliorScaleFactorAverage;
+            this.scaleFactor = migliorScaleFactorAverage;
+            this.shiftFactor = 0.0;
+            this.numUsedPoints = migliorConsensusSet.length;
+            return true;
         }
-
-        return scaleFactor;
     }
 
     //https://www.learnopengles.com/tag/perspective-divide/
@@ -657,7 +715,7 @@ public class Calibrator {
      * @param cloud nuovola di punti di arcore
      * @param cameraPose Punto della camera in riferimento alla nuvola di punti
      */
-    public double calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
+    public boolean calibrateScaleFactor(FloatBuffer inference, PointCloud cloud, Pose cameraPose){
         //Vettore con le World-Coords
         //X,Y,Z,Confidence
         float[] coords = new float[4];
@@ -670,7 +728,7 @@ public class Calibrator {
         numVisiblePoints = numPoints;
 
         //Ho un range di valori per cui accetto la nuvola.
-        if(numPoints < MIN_POINTS) return scaleFactor;
+        if(numPoints < MIN_POINTS) return false;
 
         numPoints = Math.min(numPoints, MAX_POINTS);
 
@@ -707,25 +765,29 @@ public class Calibrator {
                 sumWeight += weight;
             }else{
                 //Stranamente non riesco a trovare la predizione.
-                Log.d(TAG, "Impossibile trovare predizione di calibrazione");
+                Log.d(TAG, "Impossibile trovare corrispondeza punto-depth");
                 numVisiblePoints--;//Il punto è perso: ripeto con il prossimo.
             }
         }
+
+        points.rewind();
 
         //Devo verificare che ci sia il minimo di punti per la somma.
         if(sumWeight > 0){
             float tmpScaleFactor = sumScaleFactor / sumWeight;
 
             if(Float.isNaN(tmpScaleFactor)){
-                Log.d(TAG, "Invalid scale factor. Set: "+scaleFactor);
+                Log.d(TAG, "Weighted average calibrator failed");
+                return false;
             }else{
-                scaleFactor = tmpScaleFactor;
+                this.scaleFactor = tmpScaleFactor;
+                this.shiftFactor = 0.0;
+                this.numUsedPoints = numVisiblePoints;
+                return true;
             }
         }
 
-        points.rewind();
-
-        return scaleFactor;
+        return false;
     }
 
     /**

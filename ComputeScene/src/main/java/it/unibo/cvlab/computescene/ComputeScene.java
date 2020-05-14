@@ -261,7 +261,6 @@ public class ComputeScene {
         int i = 0;
 
         for (Pose ancora : ancore){
-            objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
             objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
             objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;
@@ -335,18 +334,22 @@ public class ComputeScene {
 
         Pose[] ancore = sceneDataset.getAncore();
 
-        if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f))
-        {
-            //Calibrazione con RANSAC fallita: provo con media ponderata
-            calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
-        }
+//        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints())){
+            //Calibratore Quadrati minimi fallito: uso RANSAC
+            if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f))
+            {
+                //Calibrazione con RANSAC fallita: provo con media ponderata
+                calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+            }
+//        }
 
-        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
+        Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", SHIFT:"+calibrator.getShiftFactor()+", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
 
         int i = 0;
 
         for (Pose ancora : ancore){
             objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
+            objectRenderers[i % objectRenderers.length].setShiftFactor((float) calibrator.getShiftFactor());
             objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
             objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;

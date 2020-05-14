@@ -17,8 +17,7 @@
     <string name="plane_finding">Searching for surfaces&#8230;</string>
 
     <string name="no_log_message">No log</string>
-    <string name="log_general_ransac">(SF: %1$f) (Punti nello schermo: %2$d) (MSE RANSACx1000: %3$f) (SF Difference: %4$f (%5$.2f %%)) (SF Avg Difference: %6$f (%7$.2f %%))</string>
-    <string name="log_general">(SF: %1$f) (Punti nello schermo: %2$d)</string>
+    <string name="log_calibrator">(SF: %1$f) (SHIFT: %2$f) (Punti nello schermo: %3$d) (Punti usati: %4$d)</string>
 
     <string name="upperDeltaPlane">Upper delta plane:</string>
     <string name="lowerDeltaPlane">Lower delta plane:</string>
@@ -27,6 +26,6 @@
     <string name="radiusObject">Radius:</string>
     <string name="sizeObject">Obj Size:</string>
     <string name="toggle_settings">Settings</string>
-    <string name="toggle_ransac">RANSAC</string>
+    <string name="toggle_advanced_calibrator">Advanced Calibrator</string>
 
 </resources>

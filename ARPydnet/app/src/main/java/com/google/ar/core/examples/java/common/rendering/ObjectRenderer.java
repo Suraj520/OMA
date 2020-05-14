@@ -141,6 +141,12 @@ public class ObjectRenderer {
     private int inferenceTextureUniform;
     private int scaleFactorUniform;
     private float scaleFactor;
+    private int shiftFactorUniform;
+    private float shiftFactor;
+
+    public void setShiftFactor(float shiftFactor) {
+        this.shiftFactor = shiftFactor;
+    }
 
     public void setScaleFactor(float scaleFactor) {
         this.scaleFactor = scaleFactor;
@@ -254,6 +260,7 @@ public class ObjectRenderer {
         windowSizeUniform = GLES20.glGetUniformLocation(program, "u_windowSize");
 
         scaleFactorUniform = GLES20.glGetUniformLocation(program, "u_scaleFactor");
+        shiftFactorUniform = GLES20.glGetUniformLocation(program, "u_shiftFactor");
         cameraPoseUniform = GLES20.glGetUniformLocation(program, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(program, "u_screenOrientation");
 
@@ -476,6 +483,7 @@ public class ObjectRenderer {
         GLES20.glUniform4f(materialParametersUniform, ambient, diffuse, specular, specularPower);
 
         GLES20.glUniform1f(scaleFactorUniform, scaleFactor);
+        GLES20.glUniform1f(shiftFactorUniform, shiftFactor);
         GLES20.glUniform3fv(cameraPoseUniform, 1, cameraPose, 0);
 
         // Attach the object texture.
