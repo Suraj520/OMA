@@ -74,9 +74,15 @@ public class ObjectRenderer {
     private float scaleFactor;
     private int shiftFactorUniform;
     private float shiftFactor;
+    private int maxDepthUniform;
+    private float maxDepth;
 
     public void setShiftFactor(float shiftFactor) {
         this.shiftFactor = shiftFactor;
+    }
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
     }
 
     public void setScaleFactor(float scaleFactor) {
@@ -153,6 +159,7 @@ public class ObjectRenderer {
 
         scaleFactorUniform = GL30.glGetUniformLocation(program, "u_scaleFactor");
         shiftFactorUniform = GL30.glGetUniformLocation(program, "u_shiftFactor");
+        maxDepthUniform = GL30.glGetUniformLocation(program, "u_maxDepth");
         cameraPoseUniform = GL30.glGetUniformLocation(program, "u_cameraPose");
 
         colorUniform = GL30.glGetUniformLocation(program, "u_objColor");
@@ -299,6 +306,7 @@ public class ObjectRenderer {
 
         GL30.glUniform1f(scaleFactorUniform, scaleFactor);
         GL30.glUniform1f(shiftFactorUniform, shiftFactor);
+        GL30.glUniform1f(maxDepthUniform, maxDepth);
         GL30.glUniform3fv(cameraPoseUniform, cameraPose);
 
         // Attach the object texture.

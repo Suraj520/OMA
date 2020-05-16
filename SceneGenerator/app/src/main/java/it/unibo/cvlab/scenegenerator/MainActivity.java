@@ -80,7 +80,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private static final float NEAR_PLANE  = 0.1f;
     private static final float FAR_PLANE  = 10.0f;
 
-    private static final Size SCREENSHOT_SIZE = new Size(1024, 574);
+    private static final Size SCREENSHOT_SIZE = new Size(1024, 576);
 
     @BindView(R.id.surfaceView)
     GLSurfaceView mySurfaceView;

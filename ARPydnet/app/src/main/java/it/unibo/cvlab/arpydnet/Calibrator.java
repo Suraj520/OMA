@@ -342,6 +342,11 @@ public class Calibrator {
             points.get(coords,0,4);
             float arConfidence = coords[3];
 
+            if(arConfidence < 0.5f){
+                numVisiblePoints--;    //Il punto non è affidabile: non lo conto e prendo il successivo
+                continue;
+            }
+
             int[] xy = getXYFromPoint(coords[0], coords[1], coords[2]);
 
             if(xy == null){
@@ -542,6 +547,11 @@ public class Calibrator {
         for (numVisiblePoints = 0; numVisiblePoints < numPoints && points.remaining() >= FLOATS_PER_POINT; numVisiblePoints++){
             points.get(coords,0,4);
             float arConfidence = coords[3];
+
+            if(arConfidence < 0.5f){
+                numVisiblePoints--;    //Il punto non è affidabile: non lo conto e prendo il successivo
+                continue;
+            }
 
             int[] xy = getXYFromPoint(coords[0], coords[1], coords[2]);
 

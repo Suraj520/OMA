@@ -19,6 +19,7 @@ uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;
 uniform sampler2D u_plasmaTexture;
 
+uniform float u_squareMinimumEnabled;
 uniform float u_maskEnabled;
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
@@ -43,11 +44,18 @@ varying vec3 v_worldPos;
 uniform vec3 u_cameraPose;
 uniform float u_scaleFactor;
 uniform float u_shiftFactor;
+uniform float u_maxDepth;
 uniform float u_screenOrientation;
 
 void main() {
 
     if(u_maskEnabled > 0.5){
+        float dx = u_cameraPose.x - v_worldPos.x;
+        float dy = u_cameraPose.y - v_worldPos.y;
+        float dz = u_cameraPose.z - v_worldPos.z;
+
+        float distance = sqrt(dx*dx+dy*dy+dz*dz);
+
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
         //https://community.khronos.org/t/gl-fragcoord-z-gl-fragcoord-w-for-quick-depth-calculation-camera-to-fragment/68919/2
         vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
@@ -88,20 +96,24 @@ void main() {
         float predictedDistance =  inferenceVector.r;
         predictedDistance = predictedDistance / u_maxPredictedDistance;
         predictedDistance = 1.0 / predictedDistance;
+
         predictedDistance = predictedDistance * u_scaleFactor + u_shiftFactor;
 
-        //float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
+        if(u_squareMinimumEnabled > 0.5){
+            float disparityCap = 1.0 / u_maxDepth;
+            if(predictedDistance < disparityCap) predictedDistance = disparityCap;
+            predictedDistance = 1.0 / predictedDistance;
 
-
-        float dx = u_cameraPose.x - v_worldPos.x;
-        float dy = u_cameraPose.y - v_worldPos.y;
-        float dz = u_cameraPose.z - v_worldPos.z;
-
-        float distance = sqrt(dx*dx+dy*dy+dz*dz);
-
-        if(distance > predictedDistance + u_lowerDelta){
-            discard;
+            if(distance < predictedDistance + u_lowerDelta){
+                discard;
+            }
+        }else{
+            if(distance > predictedDistance + u_lowerDelta){
+                discard;
+            }
         }
+
+        //float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
     }
 
     // We support approximate sRGB gamma.

@@ -1,0 +1,4 @@
+gt: ground truth salvata a 16 bit -> dopo averla letta devi dividere ogni valore per 256.0
+pred: predizione salvata a 16 bit -> dopo averla letta devi dividere ogni valore per 256.0
+
+scale: 0.0011021982754020616 shift:0.16692999005317688

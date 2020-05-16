@@ -14,5 +14,5 @@
 	"inputMin":0.0,
 	"inputMax":255.0,
 	"outputMin":0.0,
-	"outputMax":0.0
+	"outputMax":255.0
 }

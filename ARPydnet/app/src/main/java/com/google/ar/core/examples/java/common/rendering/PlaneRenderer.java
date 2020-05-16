@@ -235,6 +235,18 @@ public class PlaneRenderer {
         this.screenOrientation = screenOrientation;
     }
 
+    private int maxDepthUniform;
+    private float maxDepth;
+    private int squareMinimumEnabledUniform;
+    private boolean squareMinimumEnabled;
+
+    public void setSquareMinimumEnabled(boolean squareMinimumEnabled) {
+        this.squareMinimumEnabled = squareMinimumEnabled;
+    }
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
+    }
 
     public PlaneRenderer() {}
 
@@ -361,6 +373,9 @@ public class PlaneRenderer {
         shiftFactorUniform = GLES20.glGetUniformLocation(planeProgram, "u_shiftFactor");
         cameraPoseUniform = GLES20.glGetUniformLocation(planeProgram, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(planeProgram, "u_screenOrientation");
+
+        squareMinimumEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_squareMinimumEnabled");
+        maxDepthUniform = GLES20.glGetUniformLocation(planeProgram, "u_maxDepth");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
@@ -589,6 +604,9 @@ public class PlaneRenderer {
         GLES20.glUniform1f(scaleFactorUniform, scaleFactor);
         GLES20.glUniform1f(shiftFactorUniform, shiftFactor);
         GLES20.glUniform3fv(cameraPoseUniform, 1, this.cameraPose, 0);
+
+        GLES20.glUniform1f(maxDepthUniform, maxDepth);
+        GLES20.glUniform1f(squareMinimumEnabledUniform, squareMinimumEnabled ? 1.0f : 0.0f);
 
         // Shared fragment uniforms.
         GLES20.glUniform4fv(gridControlUniform, 1, GRID_CONTROL, 0);

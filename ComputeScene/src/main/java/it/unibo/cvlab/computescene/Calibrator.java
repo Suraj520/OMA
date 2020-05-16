@@ -82,6 +82,12 @@ public class Calibrator {
         this.shiftFactor = shiftFactor;
     }
 
+    private float maxDepth = 10.0f;
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
+    }
+
     public Calibrator() {
         this(MAPPER_SCALE_FACTOR);
     }
@@ -236,6 +242,11 @@ public class Calibrator {
         for(Point point : points){
             if(point == null) continue;
 
+            double distance = getDistance(point);
+
+            if(distance > maxDepth)
+                continue;
+
             int[] coords = getXYFromPoint(point);
 
             if(coords == null){
@@ -249,7 +260,7 @@ public class Calibrator {
 
             if(inference.remaining() >= position){
                 float predictedDistance = inference.get(position);
-                sumScaleFactor += (getDistance(point) / predictedDistance) * point.getConfidence();
+                sumScaleFactor += (distance / predictedDistance) * point.getConfidence();
                 sumWeight += point.getConfidence();
 
                 numVisiblePoints++;
@@ -275,12 +286,18 @@ public class Calibrator {
     /**
      * Classe wrapper per un punto RANSAC.
      */
-    private static class RansacObject {
+    public static class RansacObject {
         double distance;
-        float predictedDistance;
+        double disparityDistance;
+        double predictedDistance;
         double scaleFactor;
-        float arConfidence;
+        double arConfidence;
         double mse;
+
+        public void calculate(){
+            this.disparityDistance = 1.0 / distance;
+            this.scaleFactor = distance / predictedDistance;
+        }
 
         static Comparator<RansacObject> getComparatorByConfidence(){
             return (a, b) -> {
@@ -295,7 +312,7 @@ public class Calibrator {
                     return -1;
                 }
 
-                return Float.compare(a.arConfidence, b.arConfidence);
+                return Double.compare(a.arConfidence, b.arConfidence);
             };
         }
 
@@ -329,7 +346,7 @@ public class Calibrator {
                     return -1;
                 }
 
-                return Float.compare(b.arConfidence, a.arConfidence);
+                return Double.compare(b.arConfidence, a.arConfidence);
             };
         }
 
@@ -351,72 +368,8 @@ public class Calibrator {
         }
     }
 
-    /**
-     * Calcola il fattore di scala tramite algoritmo RANSAC.
-     * Dovrebbe essere più robusto rispetto al calcolo tramite media
-     *
-     * @param inference stima di profondità
-     * @param points punti point cloud da usare come ground-truth
-     * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
-     * @param normalizedThreshold valore di soglia tra 0.0 e 1.0
-     * @return fattore di scala trovato tramite RANSAC
-     */
-    public boolean calibrateScaleFactorRANSAC(FloatBuffer inference, Point[] points, int numberOfIterations, float normalizedThreshold){
-        numVisiblePoints = 0;
-
-        int numPoints = points.length;
-
-        //Check sul numero minimo di punti
-        if(numPoints < 1) return false;
-
-        RansacObject[] ransacObjects = new RansacObject[numPoints];
-
-        //Calcolo di ogni singolo scaleFactor O(N)
-        for (Point point : points){
-            if(point == null) continue;
-
-            if(point.getConfidence() < 0.3f) continue;
-
-            int[] coords = getXYFromPoint(point);
-
-            if(coords == null){
-                //Punto non valido continuo con il prossimo
-                continue;
-            }
-
-            int position = (width * coords[1]) + coords[0];
-
-            inference.rewind();
-
-            if(inference.remaining() >= position){
-                //Ricavo la distanza.
-                double distance = getDistance(point);
-
-                //Ricavo la distanza pydnet.
-                float predictedDistance = inference.get(position);
-
-                ransacObjects[numVisiblePoints] = new RansacObject();
-                ransacObjects[numVisiblePoints].distance = distance;
-                ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
-                ransacObjects[numVisiblePoints].scaleFactor = (distance / predictedDistance );
-                ransacObjects[numVisiblePoints].arConfidence = point.getConfidence();
-                numVisiblePoints++;
-            }else{
-                //Stranamente non riesco a trovare la predizione.
-                Log.log(Level.INFO, "Impossibile trovare corrispondeza punto-depth");
-            }
-        }
-
-        //Numero di punti non sufficiente
-        if(numVisiblePoints < 1) return false;
-
-        //Sorting per confidenza, decrescente: O(N*log2(N))
-        //Non ho scelto parallel perché la lista degli elementi è limitata
-        Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
-
-        //Sorting usato solo per applicare lo sbarramento
-        //Applico sbarramento numero passimo punti
-        //if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
+    public boolean calibrateScaleFactorRANSAC(RansacObject[] ransacObjects, int numberOfIterations, float normalizedThreshold){
+        if(ransacObjects.length < 1) return false;
 
         //Algoritmo RANSAC
         //Basato sullo pseudo-codice di https://it.wikipedia.org/wiki/RANSAC
@@ -432,15 +385,14 @@ public class Calibrator {
         //Punti per consensusSet: range [puntiPerPossibiliInlier, numVisiblePoints]
         int puntiConensusSet;
 
-            for (int i = 0; i < numberOfIterations; i++){
+        for (int i = 0; i < numberOfIterations; i++){
             //possibiliInlier: Punti scelti a caso dal dataset
             Integer[] possibiliInlier = new Integer[puntiPerPossibiliInlier];
             //Ordino possibiliInlier: mi servirà dopo per scorrere i punti non presenti più velocemente
             //Uso un set perché il rnd potrebbe darmi indici uguali
             SortedSet<Integer> possibiliInlierSet = new TreeSet<>();
             while(possibiliInlierSet.size() < puntiPerPossibiliInlier){
-
-                possibiliInlierSet.add(rnd.nextInt(numVisiblePoints));
+                possibiliInlierSet.add(rnd.nextInt(ransacObjects.length));
             }
             possibiliInlier = possibiliInlierSet.toArray(possibiliInlier);
 
@@ -460,7 +412,7 @@ public class Calibrator {
             double minError = Double.MAX_VALUE;
             double maxError = Double.MIN_VALUE;
 
-            for (int k = 0, j=0; k < numVisiblePoints; k++){
+            for (int k = 0, j=0; k < ransacObjects.length; k++){
                 //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
                     //Punto presente in possibiliInlier: skip
@@ -479,11 +431,11 @@ public class Calibrator {
 
             //consensusSet: Candidato a diventare migliorConsensusSet
             //ConsensusSet inizializzato a possibiliInlier
-            Integer[] consensusSet = Arrays.copyOf(possibiliInlier, numVisiblePoints);
+            Integer[] consensusSet = Arrays.copyOf(possibiliInlier, ransacObjects.length);
             puntiConensusSet = puntiPerPossibiliInlier;
 
             //Ricerca dei punti non assegnati ai possibili inlier che posso aggiungere al consensusSet
-            for (int k = 0, j = 0; k < numVisiblePoints; k++){
+            for (int k = 0, j = 0; k < ransacObjects.length; k++){
                 //Qui serve il sorting di possibiliInlier
                 if(j < puntiPerPossibiliInlier && k == possibiliInlier[j]){
                     //Punto presente in possibiliInlier: skip
@@ -532,20 +484,142 @@ public class Calibrator {
         }
     }
 
-    private static class MinimumSquareObject {
+    /**
+     * Calcola il fattore di scala tramite algoritmo RANSAC.
+     * Dovrebbe essere più robusto rispetto al calcolo tramite media
+     *
+     * @param inference stima di profondità
+     * @param points punti point cloud da usare come ground-truth
+     * @param numberOfIterations numero di iterazioni dell'algoritmo RANSAC
+     * @param normalizedThreshold valore di soglia tra 0.0 e 1.0
+     * @return fattore di scala trovato tramite RANSAC
+     */
+    public boolean calibrateScaleFactorRANSAC(FloatBuffer inference, Point[] points, int numberOfIterations, float normalizedThreshold){
+        numVisiblePoints = 0;
+
+        int numPoints = points.length;
+
+        //Check sul numero minimo di punti
+        if(numPoints < 1) return false;
+
+        RansacObject[] ransacObjects = new RansacObject[numPoints];
+
+        //Calcolo di ogni singolo scaleFactor O(N)
+        for (Point point : points){
+            if(point == null) continue;
+
+            if(point.getConfidence() < 0.3f) continue;
+
+            //Ricavo la distanza.
+            double distance = getDistance(point);
+
+            if(distance > maxDepth) continue;
+
+            int[] coords = getXYFromPoint(point);
+
+            if(coords == null){
+                //Punto non valido continuo con il prossimo
+                continue;
+            }
+
+            int position = (width * coords[1]) + coords[0];
+
+            inference.rewind();
+
+            if(inference.remaining() >= position){
+                //Ricavo la distanza pydnet.
+                float predictedDistance = inference.get(position);
+
+                ransacObjects[numVisiblePoints] = new RansacObject();
+                ransacObjects[numVisiblePoints].distance = distance;
+                ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
+                ransacObjects[numVisiblePoints].arConfidence = point.getConfidence();
+                ransacObjects[numVisiblePoints].calculate();
+                numVisiblePoints++;
+            }else{
+                //Stranamente non riesco a trovare la predizione.
+                Log.log(Level.INFO, "Impossibile trovare corrispondeza punto-depth");
+            }
+        }
+
+        //Sorting per confidenza, decrescente: O(N*log2(N))
+        //Non ho scelto parallel perché la lista degli elementi è limitata
+        //Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
+
+        //Sorting usato solo per applicare lo sbarramento
+        //Applico sbarramento numero passimo punti
+        //if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
+
+        ransacObjects = Arrays.copyOf(ransacObjects, numVisiblePoints);
+
+        return calibrateScaleFactorRANSAC(ransacObjects, numberOfIterations, normalizedThreshold);
+    }
+
+    public static class MinimumSquareObject {
         double distance;
         double disparityDistance;
         double predictedDistance;
         double predictedDistanceSquare;
         double arConfidence;
 
-        private void calculate(){
+        public void calculate(){
             this.predictedDistanceSquare = predictedDistance * predictedDistance;
             this.disparityDistance = 1.0 / distance;
         }
     }
 
     //https://gist.github.com/ranftlr/a1c7a24ebb24ce0e2f2ace5bce917022
+
+    public boolean calibrateScaleFactorQuadratiMinimi(MinimumSquareObject[] objects){
+        //Algoritmo quadrati minimi
+        //compute_scale_and_shift()
+
+        //Matrice A = [[a_00, a_01], [a_10, a_11]]
+        //a_01 = a_10
+        //Array B = [b_0, b_1]
+
+        double a00 = 0.0;
+        double a01 = 0.0;
+        double a11 = objects.length;
+
+        //IL fattore a10 è uguale a a01
+
+        double b0 = 0.0;
+        double b1 = 0.0;
+
+        for(int i = 0; i<objects.length;i++){
+            a00 += objects[i].predictedDistanceSquare;
+            a01 += objects[i].predictedDistance;
+            b0 += objects[i].predictedDistance * objects[i].distance;
+            b1 += objects[i].distance;
+        }
+
+        //Calcolo il determinante di A
+        double detA = a00 * a11 - a01 * a01;
+
+        //Mi serve un determinante strettamente positivo
+        if(detA > 0.0){
+
+            double scaleFactor = (a11*b0-a01*b1)/detA;
+            double shift = (-a01*b0+a00*b1)/detA;
+
+            //Salvo il nuovo valore.
+            if(Double.isNaN(scaleFactor) || Double.isNaN(shift)){
+                Log.log(Level.INFO, "Minimum square calibrator failed");
+                return false;
+            }else{
+                this.scaleFactor = scaleFactor;
+                this.shiftFactor = shift;
+                this.numUsedPoints = objects.length;
+                return true;
+            }
+        }
+
+        Log.log(Level.INFO, "Invalid detA: "+detA);
+
+        //Determinante non valido: esco
+        return false;
+    }
 
     /**
      * Calcola il fattore di scala tramite algoritmo quadrati minimi.
@@ -569,7 +643,13 @@ public class Calibrator {
         for (Point point : points){
             if(point == null) continue;
 
-            if(point.getConfidence() < 0.3f) continue;
+//            if(point.getConfidence() < 0.5f) continue;
+
+            //Ricavo la distanza.
+            double distance = getDistance(point);
+
+            if(distance > maxDepth)
+                continue;
 
             int[] coords = getXYFromPoint(point);
 
@@ -583,9 +663,6 @@ public class Calibrator {
             inference.rewind();
 
             if(inference.remaining() >= position){
-                //Ricavo la distanza.
-                double distance = getDistance(point);
-
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
 
@@ -602,56 +679,12 @@ public class Calibrator {
         }
 
         //Numero di punti non sufficiente
-        if(numVisiblePoints < 1) return false;
+        if(numVisiblePoints < 1)
+            return false;
 
-        //Algoritmo quadrati minimi
-        //compute_scale_and_shift()
+        minimumSquareObjects = Arrays.copyOf(minimumSquareObjects, numVisiblePoints);
 
-        //Matrice A = [[a_00, a_01], [a_10, a_11]]
-        //a_01 = a_10
-        //Array B = [b_0, b_1]
-
-        double a00 = 0.0;
-        double a01 = 0.0;
-        double a11 = numVisiblePoints;
-
-        //IL fattore a10 è uguale a a01
-
-        double b0 = 0.0;
-        double b1 = 0.0;
-
-        for(int i = 0; i<numVisiblePoints;i++){
-            a00 += minimumSquareObjects[i].predictedDistanceSquare;
-            a01 += minimumSquareObjects[i].predictedDistance;
-            b0 += minimumSquareObjects[i].predictedDistance * minimumSquareObjects[i].distance;
-            b1 += minimumSquareObjects[i].distance;
-        }
-
-        //Calcolo il determinante di A
-        double detA = a00 * a11 - a01 * a01;
-
-        //Mi serve un determinante strettamente positivo
-        if(detA > 0.0){
-
-            double scaleFactor = (a11*b0-a01*b1)/detA;
-            double shift = (-a01*b0+a00*b1)/detA;
-
-            //Salvo il nuovo valore.
-            if(Double.isNaN(scaleFactor) || Double.isNaN(shift) || scaleFactor < 0.0){
-                Log.log(Level.INFO, "Minimum square calibrator failed");
-                return false;
-            }else{
-                this.scaleFactor = scaleFactor;
-                this.shiftFactor = shift;
-                this.numUsedPoints = numVisiblePoints;
-                return true;
-            }
-        }
-
-        Log.log(Level.INFO, "Invalid detA: "+detA);
-
-        //Determinante non valido: esco
-        return false;
+        return calibrateScaleFactorQuadratiMinimi(minimumSquareObjects);
     }
 
 

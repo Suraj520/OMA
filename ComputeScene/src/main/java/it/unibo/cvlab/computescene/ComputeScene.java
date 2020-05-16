@@ -68,6 +68,8 @@ public class ComputeScene {
     private boolean attivaOMA;
     private boolean attivaRPC;
 
+    private float maxDepth = 10.0f;
+
     public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
@@ -227,6 +229,8 @@ public class ComputeScene {
     private void onSurfaceCreated() {
         GL30.glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
+        GL30.glViewport(0,0,surfaceWidth, surfaceHeight);
+
         try {
             backgroundRenderer.createOnGlThread(surfaceWidth, surfaceHeight);
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
@@ -280,6 +284,8 @@ public class ComputeScene {
     private void drawOMA(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
         System.out.println("Frame corrente:"+currentFrame);
 
+        this.maxDepth = sceneDataset.getFarPlane();
+
         //Binding dell'inference renderer
         inferenceRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
 
@@ -313,6 +319,7 @@ public class ComputeScene {
         inference = model.normalize(inference);
         inferenceArray = inference.array();
 
+        calibrator.setMaxDepth(maxDepth);
         calibrator.setCameraPose(sceneDataset.getCameraPose());
         calibrator.setWidth(model.getOutputWidth());
         calibrator.setHeight(model.getOutputHeight());
@@ -325,6 +332,7 @@ public class ComputeScene {
         saver.saveDepth(currentFrame, colorMap);
 
         for (int i = 0; i < objectRenderers.length; i++) {
+            objectRenderers[i].setMaxDepth(maxDepth);
             objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
             objectRenderers[i].setMaskEnabled(true);
             objectRenderers[i].setCameraPose(sceneDataset.getCameraPose());
@@ -334,14 +342,13 @@ public class ComputeScene {
 
         Pose[] ancore = sceneDataset.getAncore();
 
-//        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints())){
+        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints())){
             //Calibratore Quadrati minimi fallito: uso RANSAC
-            if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f))
-            {
+            if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f)){
                 //Calibrazione con RANSAC fallita: provo con media ponderata
                 calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
             }
-//        }
+        }
 
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", SHIFT:"+calibrator.getShiftFactor()+", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
 
@@ -433,7 +440,7 @@ public class ComputeScene {
 
         if(datasetPathString == null) System.exit(0);
 
-        DatasetLoader datasetLoader = new DatasetLoader(datasetPathString);
+        DatasetLoader datasetLoader = new DatasetLoader(datasetPathString.trim());
 
         Path datasetPath = datasetLoader.getDatasetPath();
         MySaver saver = new MySaver(datasetPath, model.getName());
@@ -452,7 +459,7 @@ public class ComputeScene {
             System.exit(0);
         }
 
-        attivaOMAString = attivaOMAString.toLowerCase();
+        attivaOMAString = attivaOMAString.toLowerCase().trim();
         boolean attivaOMA = attivaOMAString.equals("") || attivaOMAString.equals("y");
 
         //Richiesta attivazione OMA
@@ -463,7 +470,7 @@ public class ComputeScene {
             System.exit(0);
         }
 
-        attivaRPCString = attivaRPCString.toLowerCase();
+        attivaRPCString = attivaRPCString.toLowerCase().trim();
         boolean attivaRPC = attivaRPCString.equals("") || attivaRPCString.equals("y");
 
         System.out.println("Configurazione completata.");

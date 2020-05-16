@@ -57,5 +57,7 @@ dependencies {
     // https://mvnrepository.com/artifact/org.l33tlabs.twl/pngdecoder
     compile group: 'org.l33tlabs.twl', name: 'pngdecoder', version: '1.0'
 
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+
 
 }

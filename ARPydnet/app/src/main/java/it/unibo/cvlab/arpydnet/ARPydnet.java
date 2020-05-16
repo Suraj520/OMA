@@ -85,6 +85,8 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     public static final float NEAR_PLANE = 0.2f;
     public static final float FAR_PLANE = 5.0f;
 
+    public static final float MAX_DEPTH = FAR_PLANE;
+
     @BindView(R.id.container)
     FragmentContainerView fragmentContainerView;
 
@@ -713,6 +715,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             virtualObject.setCameraPose(cameraPose);
             virtualObjectShadow.setCameraPose(cameraPose);
 
+            planeRenderer.setMaxDepth(MAX_DEPTH);
+            virtualObject.setMaxDepth(MAX_DEPTH);
+            virtualObjectShadow.setMaxDepth(MAX_DEPTH);
+
             //Impostazione delle maschere
             if (inference != null) {
                 //Maschere
@@ -806,15 +812,23 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     if(calibrator.isLastTimestampDifferent(pointCloud)){
                         calibrator.calculateMaxEstimationDistance(inference);
 
+                        boolean smEnabled = false;
+
                         if(advancedCalibrator){
                             if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointCloud, cameraPose)){
                                 if(calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 6, 0.2f)){
                                     calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                                 }
+                            }else{
+                                smEnabled = true;
                             }
                         }else{
                             calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                         }
+
+                        planeRenderer.setSquareMinimumEnabled(smEnabled);
+                        virtualObject.setSquareMinimumEnabled(smEnabled);
+                        virtualObjectShadow.setSquareMinimumEnabled(smEnabled);
 
                         planeRenderer.setScaleFactor((float) calibrator.getScaleFactor());
                         virtualObject.setScaleFactor((float) calibrator.getScaleFactor());

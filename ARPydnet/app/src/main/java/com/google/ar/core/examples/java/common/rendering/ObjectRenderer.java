@@ -143,6 +143,18 @@ public class ObjectRenderer {
     private float scaleFactor;
     private int shiftFactorUniform;
     private float shiftFactor;
+    private int maxDepthUniform;
+    private float maxDepth;
+    private int squareMinimumEnabledUniform;
+    private boolean squareMinimumEnabled;
+
+    public void setSquareMinimumEnabled(boolean squareMinimumEnabled) {
+        this.squareMinimumEnabled = squareMinimumEnabled;
+    }
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
+    }
 
     public void setShiftFactor(float shiftFactor) {
         this.shiftFactor = shiftFactor;
@@ -250,6 +262,7 @@ public class ObjectRenderer {
         inferenceTextureUniform = GLES20.glGetUniformLocation(program, "u_inferenceTexture");
         plasmaTextureUniform = GLES20.glGetUniformLocation(program, "u_plasmaTexture");
 
+        squareMinimumEnabledUniform = GLES20.glGetUniformLocation(program, "u_squareMinimumEnabled");
         maskEnabledUniform = GLES20.glGetUniformLocation(program, "u_maskEnabled");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(program, "u_plasmaEnabled");
         plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
@@ -261,6 +274,7 @@ public class ObjectRenderer {
 
         scaleFactorUniform = GLES20.glGetUniformLocation(program, "u_scaleFactor");
         shiftFactorUniform = GLES20.glGetUniformLocation(program, "u_shiftFactor");
+        maxDepthUniform = GLES20.glGetUniformLocation(program, "u_maxDepth");
         cameraPoseUniform = GLES20.glGetUniformLocation(program, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(program, "u_screenOrientation");
 
@@ -484,6 +498,7 @@ public class ObjectRenderer {
 
         GLES20.glUniform1f(scaleFactorUniform, scaleFactor);
         GLES20.glUniform1f(shiftFactorUniform, shiftFactor);
+        GLES20.glUniform1f(maxDepthUniform, maxDepth);
         GLES20.glUniform3fv(cameraPoseUniform, 1, cameraPose, 0);
 
         // Attach the object texture.
@@ -502,6 +517,7 @@ public class ObjectRenderer {
         GLES20.glUniform1i(plasmaTextureUniform, 2);
 
         //Enabled Uniform
+        GLES20.glUniform1f(squareMinimumEnabledUniform, squareMinimumEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(maskEnabledUniform, maskEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
