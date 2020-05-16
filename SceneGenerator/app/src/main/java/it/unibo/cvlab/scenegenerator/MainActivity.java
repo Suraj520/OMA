@@ -78,7 +78,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private static final int pointsPath = R.string.points_path;
 
     private static final float NEAR_PLANE  = 0.1f;
-    private static final float FAR_PLANE  = 10.0f;
+    private static final float FAR_PLANE  = 5.0f;
 
     private static final Size SCREENSHOT_SIZE = new Size(1024, 576);
 

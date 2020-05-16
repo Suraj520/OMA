@@ -82,7 +82,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
 
     public static final boolean DEMO_MODE = false;
 
-    public static final float NEAR_PLANE = 0.2f;
+    public static final float NEAR_PLANE = 0.1f;
     public static final float FAR_PLANE = 5.0f;
 
     public static final float MAX_DEPTH = FAR_PLANE;
