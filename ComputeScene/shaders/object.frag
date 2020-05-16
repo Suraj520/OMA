@@ -38,6 +38,7 @@ uniform float u_maxDepth;
 
 uniform float u_plasmaEnabled;
 uniform float u_plasmaFactor;
+uniform sampler2D u_plasmaTexture;
 
 void main() {
     if(u_maskEnabled > 0.5){
@@ -79,6 +80,29 @@ void main() {
     if (u_objColor.a >= 255.0) {
       float intensity = objectColor.r;
       objectColor.rgb = u_objColor.rgb * intensity / 255.0;
+    }
+
+    if(u_plasmaEnabled > 0.5){
+        //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
+        vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
+
+        texcoord = vec2(texcoord.x, 1.0-texcoord.y);
+
+        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+
+        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+
+        //Normalizzazione.
+        if(inferenceValue < 0.0) inferenceValue = 0.0;
+        if(inferenceValue > 255.0) inferenceValue = 255.0;
+        inferenceValue = inferenceValue / 255.0;
+
+        //U: 0.0, 1.0, V: 0.0
+        //Si tratta di una texture monodimensionale.
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+
+        objectColor.rgb = objectColor.rgb * 0.3 + plasmaVector.rgb * 0.7;
     }
 
     gl_FragColor = objectColor;

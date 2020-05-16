@@ -20,9 +20,11 @@ uniform float u_PointSize;
 attribute vec4 a_Position;
 
 varying vec4 v_Color;
+varying float v_Confidence;
 
 void main() {
    v_Color = u_Color;
+   v_Confidence = a_Position.w;
    //Viene rimossa la quarta coordinata: non rappresenta alpha ma la confidenza del punto.
    gl_Position = u_ModelViewProjection * vec4(a_Position.xyz, 1.0);
    gl_PointSize = u_PointSize;

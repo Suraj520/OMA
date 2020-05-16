@@ -841,8 +841,6 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                         virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                         planeRenderer.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
-
-//                        thisFrameIsCalibrated = true;
                     }
                 }
 

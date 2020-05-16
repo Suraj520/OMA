@@ -90,30 +90,26 @@ void main() {
             texcoord = vec2(1.0-texcoord.x, texcoord.y);
         }
 
-
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+        float predictedDistance =  (255.0 - inferenceVector.r);
 
-        float predictedDistance =  inferenceVector.r;
-        predictedDistance = predictedDistance / u_maxPredictedDistance;
-        predictedDistance = 1.0 / predictedDistance;
+//        float predictedDistance =  inferenceVector.r;
+//        predictedDistance = predictedDistance / u_maxPredictedDistance;
+//        predictedDistance = 1.0 / predictedDistance;
 
         predictedDistance = predictedDistance * u_scaleFactor + u_shiftFactor;
 
-        if(u_squareMinimumEnabled > 0.5){
-            float disparityCap = 1.0 / u_maxDepth;
-            if(predictedDistance < disparityCap) predictedDistance = disparityCap;
-            predictedDistance = 1.0 / predictedDistance;
+//        if(u_squareMinimumEnabled > 0.5){
+//            float disparityCap = 1.0 / u_maxDepth;
+//            if(predictedDistance < disparityCap) predictedDistance = disparityCap;
+//            predictedDistance = 1.0 / predictedDistance;
+//        }else{
+//            if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+//        }
 
-            if(distance < predictedDistance + u_lowerDelta){
-                discard;
-            }
-        }else{
-            if(distance > predictedDistance + u_lowerDelta){
-                discard;
-            }
+        if(distance > predictedDistance + u_lowerDelta){
+            discard;
         }
-
-        //float predictedDistance =  (255.0 - inferenceVector.r) * u_scaleFactor;
     }
 
     // We support approximate sRGB gamma.

@@ -342,7 +342,7 @@ public class Calibrator {
             points.get(coords,0,4);
             float arConfidence = coords[3];
 
-            if(arConfidence < 0.5f){
+            if(arConfidence < 0.3f){
                 numVisiblePoints--;    //Il punto non è affidabile: non lo conto e prendo il successivo
                 continue;
             }
@@ -364,9 +364,9 @@ public class Calibrator {
 
                 //Ricavo la distanza pydnet.
                 double predictedDistance = inference.get(position);
-                predictedDistance = predictedDistance / maxPredictedDistance;
-                predictedDistance = (float) (1.0 / predictedDistance);
-                //predictedDistance = 255.0f - predictedDistance;
+//                predictedDistance = predictedDistance / maxPredictedDistance;
+//                predictedDistance = (float) (1.0 / predictedDistance);
+                predictedDistance = 255.0f - predictedDistance;
 
                 minimumSquareObjects[numVisiblePoints] = new MinimumSquareObject();
                 minimumSquareObjects[numVisiblePoints].distance = distance;
@@ -419,7 +419,7 @@ public class Calibrator {
             double shift = (-a01*b0+a00*b1)/detA;
 
             //Salvo il nuovo valore.
-            if(Double.isNaN(scaleFactor) || Double.isNaN(shift) || scaleFactor < 0.0){
+            if(Double.isNaN(scaleFactor) || Double.isNaN(shift)){
                 Log.d(TAG, "Minimum square calibrator failed");
                 return false;
             }else{
@@ -548,7 +548,7 @@ public class Calibrator {
             points.get(coords,0,4);
             float arConfidence = coords[3];
 
-            if(arConfidence < 0.5f){
+            if(arConfidence < 0.3f){
                 numVisiblePoints--;    //Il punto non è affidabile: non lo conto e prendo il successivo
                 continue;
             }
@@ -570,9 +570,9 @@ public class Calibrator {
 
                 //Ricavo la distanza pydnet.
                 double predictedDistance = inference.get(position);
-                predictedDistance = predictedDistance / maxPredictedDistance;
-                predictedDistance = (float) (1.0 / predictedDistance);
-                //predictedDistance = 255.0f - predictedDistance;
+//                predictedDistance = predictedDistance / maxPredictedDistance;
+//                predictedDistance = (float) (1.0 / predictedDistance);
+                predictedDistance = 255.0f - predictedDistance;
 
                 ransacObjects[numVisiblePoints] = new RansacObject();
                 ransacObjects[numVisiblePoints].distance = distance;
@@ -766,9 +766,9 @@ public class Calibrator {
 
                 //Ricavo la distanza pydnet.
                 float predictedDistance = inference.get(position);
-                predictedDistance = predictedDistance / maxPredictedDistance;
-                predictedDistance = (float) (1.0 / predictedDistance);
-                //predictedDistance = 255.0f - predictedDistance;
+//                predictedDistance = predictedDistance / maxPredictedDistance;
+//                predictedDistance = (float) (1.0 / predictedDistance);
+                predictedDistance = 255.0f - predictedDistance;
 
                 //Faccio la somma: prendo una media PONDERATA dei punti.
                 sumScaleFactor += (distance / predictedDistance ) * weight;
