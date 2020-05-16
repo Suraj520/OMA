@@ -155,18 +155,10 @@ public class Calibrator {
         return new float[]{xFloat, yFloat};
     }
 
-    private float getDistance(Point point){
+    public float getDistance(ITraslation point){
         float dx = cameraPose.getTx() - point.getTx();
         float dy = cameraPose.getTy() - point.getTy();
         float dz = cameraPose.getTz() - point.getTz();
-
-        return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
-    }
-
-    private float getDistance(float x, float y, float z){
-        float dx = cameraPose.getTx() - x;
-        float dy = cameraPose.getTy() - y;
-        float dz = cameraPose.getTz() - z;
 
         return (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
     }
@@ -226,6 +218,21 @@ public class Calibrator {
         return new int[]{x,y};
     }
 
+    public Float getPredictedDistanceFromPoint(FloatBuffer inference, ITraslation point){
+        int[] coords = getXYFromPoint(point);
+
+        if(coords != null){
+            int position = (width * coords[1]) + coords[0];
+
+            inference.rewind();
+
+            if(inference.remaining() >= position) {
+                return inference.get(position);
+            }
+        }
+        return null;
+    }
+
     //https://learnopengl.com/Getting-started/Coordinate-Systems
 
     /**
@@ -247,19 +254,9 @@ public class Calibrator {
             if(distance > maxDepth)
                 continue;
 
-            int[] coords = getXYFromPoint(point);
+            Float predictedDistance = getPredictedDistanceFromPoint(inference, point);
 
-            if(coords == null){
-                //Punto non valido continuo con il prossimo
-                continue;
-            }
-
-            int position = (width * coords[1]) + coords[0];
-
-            inference.rewind();
-
-            if(inference.remaining() >= position){
-                float predictedDistance = inference.get(position);
+            if(predictedDistance != null){
                 sumScaleFactor += (distance / predictedDistance) * point.getConfidence();
                 sumWeight += point.getConfidence();
 
@@ -515,21 +512,9 @@ public class Calibrator {
 
             if(distance > maxDepth) continue;
 
-            int[] coords = getXYFromPoint(point);
+            Float predictedDistance = getPredictedDistanceFromPoint(inference, point);
 
-            if(coords == null){
-                //Punto non valido continuo con il prossimo
-                continue;
-            }
-
-            int position = (width * coords[1]) + coords[0];
-
-            inference.rewind();
-
-            if(inference.remaining() >= position){
-                //Ricavo la distanza pydnet.
-                float predictedDistance = inference.get(position);
-
+            if(predictedDistance != null){
                 ransacObjects[numVisiblePoints] = new RansacObject();
                 ransacObjects[numVisiblePoints].distance = distance;
                 ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
@@ -643,29 +628,15 @@ public class Calibrator {
         for (Point point : points){
             if(point == null) continue;
 
-//            if(point.getConfidence() < 0.5f) continue;
-
             //Ricavo la distanza.
             double distance = getDistance(point);
 
             if(distance > maxDepth)
                 continue;
 
-            int[] coords = getXYFromPoint(point);
+            Float predictedDistance = getPredictedDistanceFromPoint(inference, point);
 
-            if(coords == null){
-                //Punto non valido continuo con il prossimo
-                continue;
-            }
-
-            int position = (width * coords[1]) + coords[0];
-
-            inference.rewind();
-
-            if(inference.remaining() >= position){
-                //Ricavo la distanza pydnet.
-                float predictedDistance = inference.get(position);
-
+            if(predictedDistance != null){
                 minimumSquareObjects[numVisiblePoints] = new MinimumSquareObject();
                 minimumSquareObjects[numVisiblePoints].distance = distance;
                 minimumSquareObjects[numVisiblePoints].predictedDistance = predictedDistance;

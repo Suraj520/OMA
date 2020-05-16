@@ -1,5 +1,6 @@
 package it.unibo.cvlab.computescene.rendering;
 
+import it.unibo.cvlab.computescene.Utils;
 import org.lwjgl.opengl.GL30;
 
 import java.awt.image.BufferedImage;
@@ -56,7 +57,7 @@ public class BackgroundRenderer {
     //Riferimento alle coordinate delle texture.
     private int backgroundTexCoordAttribute;
 
-    private int[] textures = new int[2];
+    private int[] textures = new int[4];
 
     private int getBackgroundTextureId() {
         return textures[0];
@@ -64,6 +65,49 @@ public class BackgroundRenderer {
 
     public int getScreenshotFrameBufferTextureId(){
         return textures[1];
+    }
+
+    private int getPlasmaTextureId(){
+        return textures[2];
+    }
+
+    private int getInferenceTextureId(){
+        return textures[3];
+    }
+
+    private int inferenceTextureUniform;
+    private int plasmaEnabledUniform;
+    private int plasmaTextureUniform;
+    private int plasmaFactorUniform;
+
+    private boolean plasmaEnabled = false;
+    private float plasmaFactor = 1.0f;
+
+    public void setPlasmaEnabled(boolean plasmaEnabled) {
+        this.plasmaEnabled = plasmaEnabled;
+    }
+
+    public void setPlasmaFactor(float plasmaFactor) {
+        this.plasmaFactor = plasmaFactor;
+    }
+
+    private int scaleFactorUniform;
+    private float scaleFactor;
+    private int shiftFactorUniform;
+    private float shiftFactor;
+    private int maxDepthUniform;
+    private float maxDepth;
+
+    public void setShiftFactor(float shiftFactor) {
+        this.shiftFactor = shiftFactor;
+    }
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
+    }
+
+    public void setScaleFactor(float scaleFactor) {
+        this.scaleFactor = scaleFactor;
     }
 
     private int[] frameBuffers = new int[1];
@@ -82,6 +126,31 @@ public class BackgroundRenderer {
 
         GL30.glActiveTexture(GL30.GL_TEXTURE0);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, getBackgroundTextureId());
+
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
+
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_LINEAR);
+
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
+
+        GL30.glActiveTexture(GL30.GL_TEXTURE2);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getPlasmaTextureId());
+
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
+
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
+        GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_LINEAR);
+
+        //Carico la texture plasma Width: 256 height: 1
+        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGB32F, Utils.PLASMA.length / 3, 1, 0, GL30.GL_RGB, GL30.GL_FLOAT, Utils.PLASMA);
+
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
+
+        GL30.glActiveTexture(GL30.GL_TEXTURE3);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getInferenceTextureId());
 
         GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
         GL30.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
@@ -168,6 +237,16 @@ public class BackgroundRenderer {
         backgroundTexCoordAttribute = GL30.glGetAttribLocation(program, "a_backgroundTextCoord");
         backgroundTextureUniform = GL30.glGetUniformLocation(program, "u_backgroundTexture");
 
+        plasmaEnabledUniform = GL30.glGetUniformLocation(program, "u_plasmaEnabled");
+        plasmaFactorUniform = GL30.glGetUniformLocation(program, "u_plasmaFactor");
+        plasmaTextureUniform = GL30.glGetUniformLocation(program, "u_plasmaTexture");
+
+        scaleFactorUniform = GL30.glGetUniformLocation(program, "u_scaleFactor");
+        shiftFactorUniform = GL30.glGetUniformLocation(program, "u_shiftFactor");
+        maxDepthUniform = GL30.glGetUniformLocation(program, "u_maxDepth");
+
+        inferenceTextureUniform = GL30.glGetUniformLocation(program, "u_inferenceTexture");
+
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
 
@@ -186,10 +265,26 @@ public class BackgroundRenderer {
 
         GL30.glUseProgram(program);
 
-        GL30.glUniform1i(backgroundTextureUniform,  0);
+        GL30.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
+        GL30.glUniform1f(plasmaFactorUniform, plasmaFactor);
+        GL30.glUniform1f(scaleFactorUniform, scaleFactor);
+        GL30.glUniform1f(shiftFactorUniform, shiftFactor);
+        GL30.glUniform1f(maxDepthUniform, maxDepth);
+
 
         GL30.glActiveTexture(GL30.GL_TEXTURE0);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, getBackgroundTextureId());
+        GL30.glUniform1i(backgroundTextureUniform, 0);
+
+        //Attach plasma texture
+        GL30.glActiveTexture(GL30.GL_TEXTURE2);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getPlasmaTextureId());
+        GL30.glUniform1i(plasmaTextureUniform, 2);
+
+        //Attach mask texture
+        GL30.glActiveTexture(GL30.GL_TEXTURE3);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getInferenceTextureId());
+        GL30.glUniform1i(inferenceTextureUniform, 3);
 
         // Set the vertex positions.
         GL30.glVertexAttribPointer(
@@ -219,11 +314,30 @@ public class BackgroundRenderer {
         GL30.glActiveTexture(GL30.GL_TEXTURE0);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
 
+        GL30.glActiveTexture(GL30.GL_TEXTURE2);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
+
+        GL30.glActiveTexture(GL30.GL_TEXTURE3);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
+
         // Restore the depth state for further drawing.
         GL30.glDepthMask(true);
         GL30.glEnable(GL30.GL_DEPTH_TEST);
 
         ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw");
+    }
+
+    //https://community.khronos.org/t/loading-and-reading-a-floating-point-texture/63360
+    //http://www.anandmuralidhar.com/blog/android/load-read-texture/
+    //https://github.com/anandmuralidhar24/FloatTextureAndroid
+    //Metodo per caricare la maschera
+    public void loadInference(float[] inferenceArray, int width, int height){
+        GL30.glActiveTexture(GL30.GL_TEXTURE3);
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getInferenceTextureId());
+
+        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R32F, width, height, 0, GL30.GL_RED, GL30.GL_FLOAT, inferenceArray);
+
+        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
     }
 
     /**

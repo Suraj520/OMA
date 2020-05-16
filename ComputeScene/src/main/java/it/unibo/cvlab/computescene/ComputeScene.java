@@ -67,10 +67,11 @@ public class ComputeScene {
     private ColorMapper colorMapper;
     private boolean attivaOMA;
     private boolean attivaRPC;
+    private boolean attivaDepth;
 
     private float maxDepth = 10.0f;
 
-    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC) {
+    public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC, boolean attivaDepth) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
         this.objectRenderers = new ObjectRenderer[objects.length];
@@ -80,6 +81,7 @@ public class ComputeScene {
         this.colorMapper = new ColorMapper(model.getPlasmaFactor(), 4);
         this.attivaOMA = attivaOMA;
         this.attivaRPC = attivaRPC;
+        this.attivaDepth = attivaDepth;
 
         //Inizializzazione rendering oggetti: imposto già il delta e lo scale factor dell'oggetto.
         for (int i = 0; i < objects.length; i++) {
@@ -285,6 +287,7 @@ public class ComputeScene {
         System.out.println("Frame corrente:"+currentFrame);
 
         this.maxDepth = sceneDataset.getFarPlane();
+        backgroundRenderer.setPlasmaEnabled(false);
 
         //Binding dell'inference renderer
         inferenceRenderer.setSourceTextureId(backgroundRenderer.getScreenshotFrameBufferTextureId());
@@ -332,6 +335,8 @@ public class ComputeScene {
         saver.saveDepth(currentFrame, colorMap);
 
         for (int i = 0; i < objectRenderers.length; i++) {
+            objectRenderers[i].setPlasmaFactor(model.getPlasmaFactor());
+            objectRenderers[i].setPlasmaEnabled(attivaDepth);
             objectRenderers[i].setMaxDepth(maxDepth);
             objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
             objectRenderers[i].setMaskEnabled(true);
@@ -352,9 +357,30 @@ public class ComputeScene {
 
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", SHIFT:"+calibrator.getShiftFactor()+", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
 
+        //Ridisegno lo sfondo se attivo la depth
+        if(attivaDepth){
+            backgroundRenderer.setMaxDepth(maxDepth);
+            backgroundRenderer.setScaleFactor((float)calibrator.getScaleFactor());
+            backgroundRenderer.setShiftFactor((float)calibrator.getShiftFactor());
+            backgroundRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
+            backgroundRenderer.setPlasmaFactor(model.getPlasmaFactor());
+            backgroundRenderer.setPlasmaEnabled(true);
+            backgroundRenderer.draw();
+        }
+
         int i = 0;
 
         for (Pose ancora : ancore){
+            //Debug distance
+            double distance = calibrator.getDistance(ancora);
+            int[] xyFromPoint = calibrator.getXYFromPoint(ancora);
+            Float predictedDistance = calibrator.getPredictedDistanceFromPoint(inference, ancora);
+
+            if(predictedDistance != null){
+                double scaledPredictedDistance = predictedDistance * calibrator.getScaleFactor() + calibrator.getShiftFactor();
+                Log.log(Level.INFO, "Ancora "+i+", distance: "+distance+", predicted distance: "+predictedDistance+"scaled predicted distance: "+scaledPredictedDistance+", XY:"+xyFromPoint[0]/640.0*1024.0+", "+xyFromPoint[1]/384.0*576.0);
+            }
+
             objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
             objectRenderers[i % objectRenderers.length].setShiftFactor((float) calibrator.getShiftFactor());
             objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
@@ -462,7 +488,7 @@ public class ComputeScene {
         attivaOMAString = attivaOMAString.toLowerCase().trim();
         boolean attivaOMA = attivaOMAString.equals("") || attivaOMAString.equals("y");
 
-        //Richiesta attivazione OMA
+        //Richiesta attivazione PointCloud
         System.out.println("Attivo Rendering PointCloud? (Y/n)");
         String attivaRPCString = inReader.readLine();
 
@@ -473,12 +499,28 @@ public class ComputeScene {
         attivaRPCString = attivaRPCString.toLowerCase().trim();
         boolean attivaRPC = attivaRPCString.equals("") || attivaRPCString.equals("y");
 
+        boolean attivaDepth = false;
+
+        //Richiesta attivazione Depth
+        if(attivaOMA){
+            System.out.println("Attivo Rendering Depth? (Y/n)");
+            String attivaDepthString = inReader.readLine();
+
+            if(attivaDepthString == null){
+                System.exit(0);
+            }
+
+            attivaDepthString = attivaDepthString.toLowerCase().trim();
+            attivaDepth = attivaDepthString.equals("") || attivaDepthString.equals("y");
+        }
+
+
         System.out.println("Configurazione completata.");
         System.out.println("Procedo alla post-produzione delle immagini (cartella oma)");
         System.out.println("Salvo anche una versione depth (cartella depth)");
 
         //Passo all'app datasetLoader, modello, oggetto e texture
-        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType, attivaOMA, attivaRPC);
+        computeScene = new ComputeScene(datasetLoader, objects, saver, model, colorType, attivaOMA, attivaRPC, attivaDepth);
 
         System.out.println("Precaricamento...");
         computeScene.load();

@@ -9,7 +9,7 @@
 	"inputType":"float32",
 	"outputShape":[1,384,640,1],
 	"outputType":"float32",
-	"outputNormalization":"inverse",
+	"outputNormalization":"negate",
 	"plasmaFactor": 1.0,
 	"inputMin":0.0,
 	"inputMax":255.0,

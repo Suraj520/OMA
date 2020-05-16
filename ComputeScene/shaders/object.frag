@@ -60,6 +60,10 @@ void main() {
 //        if(predictedDistance < disparityCap) predictedDistance = disparityCap;
 //        predictedDistance = 1.0 / predictedDistance;
 
+        //Maxdepth?
+
+        if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+
         float dx = u_cameraPose.x-v_worldPos.x;
         float dy = u_cameraPose.y-v_worldPos.y;
         float dz = u_cameraPose.z-v_worldPos.z;
@@ -84,23 +88,29 @@ void main() {
 
     if(u_plasmaEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
-        vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
+//        vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
+//
+//        texcoord = vec2(texcoord.x, 1.0-texcoord.y);
+//
+//        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+//
+//        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+//        float predictedDistance = inferenceVector.r * u_scaleFactor + u_shiftFactor;
+//
+//        if(predictedDistance < 0.0) predictedDistance = 0.0;
+//        if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+//        predictedDistance = predictedDistance / u_maxDepth;
 
-        texcoord = vec2(texcoord.x, 1.0-texcoord.y);
+        float dx = u_cameraPose.x-v_worldPos.x;
+        float dy = u_cameraPose.y-v_worldPos.y;
+        float dz = u_cameraPose.z-v_worldPos.z;
 
-        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-
-        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = inferenceVector.r * u_plasmaFactor;
-
-        //Normalizzazione.
-        if(inferenceValue < 0.0) inferenceValue = 0.0;
-        if(inferenceValue > 255.0) inferenceValue = 255.0;
-        inferenceValue = inferenceValue / 255.0;
+        float distance = sqrt(dx*dx+dy*dy+dz*dz);
+        distance = distance / u_maxDepth;
 
         //U: 0.0, 1.0, V: 0.0
         //Si tratta di una texture monodimensionale.
-        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(distance * 5.0, 0.0));
 
         objectColor.rgb = objectColor.rgb * 0.3 + plasmaVector.rgb * 0.7;
     }
