@@ -179,7 +179,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
     private boolean maskEnabled = false;
     private boolean dualScreenMode = false;
     private boolean rainEnabled = false;
-    private boolean advancedCalibrator = false;
+//    private boolean advancedCalibrator = false;
 
     // Temporary matrix allocated here to reduce number of allocations for each frame.
     private final float[] anchorMatrix = new float[16];
@@ -343,7 +343,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         optionsMenu.findItem(R.id.toggle_depth_color).setIcon(depthColorEnabled ? R.drawable.ic_depth_color : R.drawable.ic_depth_color_off);
         optionsMenu.findItem(R.id.toggle_mask).setIcon(maskEnabled ? R.drawable.ic_mask : R.drawable.ic_mask_off);
         optionsMenu.findItem(R.id.toggle_dual_screen).setIcon(dualScreenMode ? R.drawable.ic_dual_screen : R.drawable.ic_dual_screen_off);
-        optionsMenu.findItem(R.id.toggle_advanced_calibrator).setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
+//        optionsMenu.findItem(R.id.toggle_advanced_calibrator).setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
 
         //Attivo il depth solo se non siamo in dual mode.
         optionsMenu.findItem(R.id.toggle_depth_color).setEnabled(!dualScreenMode);
@@ -365,10 +365,10 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                     rainEnabled = !rainEnabled;
                     return true;
 
-                case R.id.toggle_advanced_calibrator:
-                    advancedCalibrator = !advancedCalibrator;
-                    item.setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
-                    return true;
+//                case R.id.toggle_advanced_calibrator:
+//                    advancedCalibrator = !advancedCalibrator;
+//                    item.setIcon(advancedCalibrator ? R.drawable.ic_adv_cal_on : R.drawable.ic_adv_cal_off);
+//                    return true;
 
                 case R.id.toggle_settings:
                     settingsContainer.setVisibility(settingsContainer.getVisibility() == View.VISIBLE ? View.INVISIBLE : View.VISIBLE);
@@ -609,22 +609,16 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
         try {
             // Create the texture and pass it to ARCore session to be filled during update().
             backgroundRenderer.createOnGlThread(/*context=*/ this);
-            backgroundRenderer.setPlasmaFactor(generalModel.getColorFactor());
-
-            planeRenderer.createOnGlThread(/*context=*/ this, "models/leaf.png", "models/rain.png");
-            planeRenderer.setPlasmaFactor(generalModel.getColorFactor());
-
+            planeRenderer.createOnGlThread(/*context=*/ this, "models/trigrid.png", "models/rain.png");
             pointCloudRenderer.createOnGlThread(/*context=*/ this);
 
             virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");
             virtualObject.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
-            virtualObject.setPlasmaFactor(generalModel.getColorFactor());
 
             virtualObjectShadow.createOnGlThread(
                     /*context=*/ this, "models/andy_shadow.obj", "models/andy_shadow.png");
             virtualObjectShadow.setBlendMode(ObjectRenderer.BlendMode.Shadow);
             virtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
-            virtualObjectShadow.setPlasmaFactor(generalModel.getColorFactor());
 
             screenshotRenderer.createOnGlThread(this, RESOLUTION);
 
@@ -715,6 +709,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             virtualObject.setCameraPose(cameraPose);
             virtualObjectShadow.setCameraPose(cameraPose);
 
+            backgroundRenderer.setMaxDepth(MAX_DEPTH);
             planeRenderer.setMaxDepth(MAX_DEPTH);
             virtualObject.setMaxDepth(MAX_DEPTH);
             virtualObjectShadow.setMaxDepth(MAX_DEPTH);
@@ -767,9 +762,7 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
                 //Vecchio metodo: 160 ms
 
 //                long nanos = SystemClock.elapsedRealtime();
-
                 screenshotRenderer.screenshot(currentModel);
-
 //                Log.d(TAG, "screenshot takes: " + (SystemClock.elapsedRealtime()-nanos));
 
                 //Posso far partire il modello.
@@ -810,37 +803,27 @@ public class ARPydnet extends AppCompatActivity implements GLSurfaceView.Rendere
             try (PointCloud pointCloud = frame.acquirePointCloud()) {
                 if(inference != null){
                     if(calibrator.isLastTimestampDifferent(pointCloud)){
-                        calibrator.calculateMaxEstimationDistance(inference);
+//                        calibrator.calculateMaxEstimationDistance(inference);
 
-                        boolean smEnabled = false;
-
-                        if(advancedCalibrator){
-                            if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointCloud, cameraPose)){
-                                if(calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 6, 0.2f)){
-                                    calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
-                                }
-                            }else{
-                                smEnabled = true;
+                        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointCloud, cameraPose)){
+                            if(calibrator.calibrateScaleFactorRANSAC(inference, pointCloud, cameraPose, 6, 0.2f)){
+                                calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                             }
-                        }else{
-                            calibrator.calibrateScaleFactor(inference, pointCloud, cameraPose);
                         }
 
-                        planeRenderer.setSquareMinimumEnabled(smEnabled);
-                        virtualObject.setSquareMinimumEnabled(smEnabled);
-                        virtualObjectShadow.setSquareMinimumEnabled(smEnabled);
-
+                        backgroundRenderer.setScaleFactor((float) calibrator.getScaleFactor());
                         planeRenderer.setScaleFactor((float) calibrator.getScaleFactor());
                         virtualObject.setScaleFactor((float) calibrator.getScaleFactor());
                         virtualObjectShadow.setScaleFactor((float) calibrator.getScaleFactor());
 
+                        backgroundRenderer.setShiftFactor((float) calibrator.getShiftFactor());
                         planeRenderer.setShiftFactor((float) calibrator.getShiftFactor());
                         virtualObject.setShiftFactor((float) calibrator.getShiftFactor());
                         virtualObjectShadow.setShiftFactor((float) calibrator.getShiftFactor());
 
-                        virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
-                        virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
-                        planeRenderer.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+//                        virtualObject.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+//                        virtualObjectShadow.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
+//                        planeRenderer.setMaxPredictedDistance(calibrator.getMaxPredictedDistance());
                     }
                 }
 

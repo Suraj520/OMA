@@ -25,7 +25,9 @@ uniform sampler2D u_inferenceTexture;
 uniform sampler2D u_plasmaTexture;
 
 uniform float u_plasmaEnabled;
-uniform float u_plasmaFactor;
+uniform float u_scaleFactor;
+uniform float u_shiftFactor;
+uniform float u_maxDepth;
 
 void main() {
     vec4 backgroundTextureColor = texture2D(u_backgroundTexture, v_backgroundTextCoord);
@@ -35,19 +37,18 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, v_plasmaTextCoord);
 
         //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+        float predictedDistance = (255.0 - inferenceVector.r) * u_scaleFactor + u_shiftFactor;
 
-        //Normalizzazione.
-        if(inferenceValue < 0.0) inferenceValue = 0.0;
-        if(inferenceValue > 255.0) inferenceValue = 255.0;
-        inferenceValue = inferenceValue / 255.0;
+        if(predictedDistance < 0.0) predictedDistance = 0.0;
+        if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+        predictedDistance = predictedDistance / u_maxDepth;
 
         //U: 0.0, 1.0, V: 0.0
         //Si tratta di una texture monodimensionale.
-        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(predictedDistance * 2.5, 0.0));
 
         //backgroundTextureColor.rgb = backgroundTextureColor.rgb * plasmaVector.rgb;
-        backgroundTextureColor.rgb = plasmaVector.rgb;
+        backgroundTextureColor.rgb = backgroundTextureColor.rgb * 0.3 + plasmaVector.rgb * 0.7;
     }
 
     gl_FragColor = backgroundTextureColor;

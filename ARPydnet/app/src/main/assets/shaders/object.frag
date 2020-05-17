@@ -19,10 +19,8 @@ uniform sampler2D u_texture;
 uniform sampler2D u_inferenceTexture;
 uniform sampler2D u_plasmaTexture;
 
-uniform float u_squareMinimumEnabled;
 uniform float u_maskEnabled;
 uniform float u_plasmaEnabled;
-uniform float u_plasmaFactor;
 
 uniform float u_lowerDelta;
 uniform float u_maxPredictedDistance;
@@ -93,19 +91,7 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
         float predictedDistance =  (255.0 - inferenceVector.r);
 
-//        float predictedDistance =  inferenceVector.r;
-//        predictedDistance = predictedDistance / u_maxPredictedDistance;
-//        predictedDistance = 1.0 / predictedDistance;
-
         predictedDistance = predictedDistance * u_scaleFactor + u_shiftFactor;
-
-//        if(u_squareMinimumEnabled > 0.5){
-//            float disparityCap = 1.0 / u_maxDepth;
-//            if(predictedDistance < disparityCap) predictedDistance = disparityCap;
-//            predictedDistance = 1.0 / predictedDistance;
-//        }else{
-//            if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
-//        }
 
         if(distance > predictedDistance + u_lowerDelta){
             discard;
@@ -165,7 +151,7 @@ void main() {
 
     if(u_plasmaEnabled > 0.5){
         //https://community.khronos.org/t/confused-about-gl-fragcoord-use-with-textures/67832/3
-        vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
+//        vec2 texcoord = (gl_FragCoord.xy - vec2(0.5,0.5)) / u_windowSize;
 
         //Devo trasformare le coordinate della texture a seconda dell'orientaento dello schermo.
         //Dritto: 0
@@ -174,41 +160,47 @@ void main() {
         //Landscape con il caricatore a sinistra: 270
 
 
-        if(-0.5 < u_screenOrientation && u_screenOrientation < 0.5){
-            //Dritto devo fare delle trasformazioni
-            texcoord = vec2(1.0-texcoord.y, 1.0-texcoord.x);
-        }
+//        if(-0.5 < u_screenOrientation && u_screenOrientation < 0.5){
+//            //Dritto devo fare delle trasformazioni
+//            texcoord = vec2(1.0-texcoord.y, 1.0-texcoord.x);
+//        }
+//
+//        if(89.5 < u_screenOrientation && u_screenOrientation < 90.5){
+//            //Landscape con caricatore a destra: Inverto solo y
+//            texcoord = vec2(texcoord.x, 1.0-texcoord.y);
+//        }
+//
+//        if(179.5 < u_screenOrientation && u_screenOrientation < 180.5){
+//            //Sottosopra.
+//            texcoord = vec2(texcoord.y, texcoord.x);
+//        }
+//
+//        if(269.5 < u_screenOrientation && u_screenOrientation < 270.5){
+//            //Landscape con caricatore a sinistra: Inverto solo x
+//            texcoord = vec2(1.0-texcoord.x, texcoord.y);
+//        }
 
-        if(89.5 < u_screenOrientation && u_screenOrientation < 90.5){
-            //Landscape con caricatore a destra: Inverto solo y
-            texcoord = vec2(texcoord.x, 1.0-texcoord.y);
-        }
+        //        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
+        //
+        //        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
+        //        float predictedDistance = (255.0 - inferenceVector.r) * u_scaleFactor + u_shiftFactor;
+        //
+        //        if(predictedDistance < 0.0) predictedDistance = 0.0;
+        //        if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+        //        predictedDistance = predictedDistance / u_maxDepth;
 
-        if(179.5 < u_screenOrientation && u_screenOrientation < 180.5){
-            //Sottosopra.
-            texcoord = vec2(texcoord.y, texcoord.x);
-        }
+        float dx = u_cameraPose.x-v_worldPos.x;
+        float dy = u_cameraPose.y-v_worldPos.y;
+        float dz = u_cameraPose.z-v_worldPos.z;
 
-        if(269.5 < u_screenOrientation && u_screenOrientation < 270.5){
-            //Landscape con caricatore a sinistra: Inverto solo x
-            texcoord = vec2(1.0-texcoord.x, texcoord.y);
-        }
-
-        vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
-
-        //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = inferenceVector.r * u_plasmaFactor;
-
-        //Normalizzazione.
-        if(inferenceValue < 0.0) inferenceValue = 0.0;
-        if(inferenceValue > 255.0) inferenceValue = 255.0;
-        inferenceValue = inferenceValue / 255.0;
+        float distance = sqrt(dx*dx+dy*dy+dz*dz);
+        distance = distance / u_maxDepth;
 
         //U: 0.0, 1.0, V: 0.0
         //Si tratta di una texture monodimensionale.
-        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(distance * 2.5, 0.0));
 
-        gl_FragColor.rgb = color * plasmaVector.rgb;
+        gl_FragColor.rgb = color * 0.3 + plasmaVector.rgb * 0.7;
     }else{
         gl_FragColor.rgb = color;
     }

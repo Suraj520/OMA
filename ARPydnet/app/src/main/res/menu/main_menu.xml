@@ -14,11 +14,11 @@
         android:title="@string/toggle_mask"
         app:showAsAction="always"/>
 
-    <item
-        android:id="@+id/toggle_advanced_calibrator"
-        android:icon="@drawable/ic_adv_cal_off"
-        android:title="@string/toggle_advanced_calibrator"
-        app:showAsAction="always"/>
+<!--    <item-->
+<!--        android:id="@+id/toggle_advanced_calibrator"-->
+<!--        android:icon="@drawable/ic_adv_cal_off"-->
+<!--        android:title="@string/toggle_advanced_calibrator"-->
+<!--        app:showAsAction="always"/>-->
 
 
     <item

@@ -81,18 +81,13 @@ public class ObjectRenderer {
     private float maxDepth;
     private int plasmaEnabledUniform;
     private int plasmaTextureUniform;
-    private int plasmaFactorUniform;
 
     private boolean plasmaEnabled = false;
-    private float plasmaFactor = 1.0f;
 
     public void setPlasmaEnabled(boolean plasmaEnabled) {
         this.plasmaEnabled = plasmaEnabled;
     }
 
-    public void setPlasmaFactor(float plasmaFactor) {
-        this.plasmaFactor = plasmaFactor;
-    }
 
     public void setShiftFactor(float shiftFactor) {
         this.shiftFactor = shiftFactor;
@@ -182,7 +177,6 @@ public class ObjectRenderer {
         colorUniform = GL30.glGetUniformLocation(program, "u_objColor");
 
         plasmaEnabledUniform = GL30.glGetUniformLocation(program, "u_plasmaEnabled");
-        plasmaFactorUniform = GL30.glGetUniformLocation(program, "u_plasmaFactor");
         plasmaTextureUniform = GL30.glGetUniformLocation(program, "u_plasmaTexture");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
@@ -341,7 +335,6 @@ public class ObjectRenderer {
 
         GL30.glUniform1f(scaleFactorUniform, scaleFactor);
         GL30.glUniform1f(shiftFactorUniform, shiftFactor);
-        GL30.glUniform1f(plasmaFactorUniform, plasmaFactor);
         GL30.glUniform1f(maxDepthUniform, maxDepth);
         GL30.glUniform3fv(cameraPoseUniform, cameraPose);
 

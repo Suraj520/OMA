@@ -335,7 +335,6 @@ public class ComputeScene {
         saver.saveDepth(currentFrame, colorMap);
 
         for (int i = 0; i < objectRenderers.length; i++) {
-            objectRenderers[i].setPlasmaFactor(model.getPlasmaFactor());
             objectRenderers[i].setPlasmaEnabled(attivaDepth);
             objectRenderers[i].setMaxDepth(maxDepth);
             objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
@@ -363,7 +362,6 @@ public class ComputeScene {
             backgroundRenderer.setScaleFactor((float)calibrator.getScaleFactor());
             backgroundRenderer.setShiftFactor((float)calibrator.getShiftFactor());
             backgroundRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
-            backgroundRenderer.setPlasmaFactor(model.getPlasmaFactor());
             backgroundRenderer.setPlasmaEnabled(true);
             backgroundRenderer.draw();
         }
@@ -378,7 +376,7 @@ public class ComputeScene {
 
             if(predictedDistance != null){
                 double scaledPredictedDistance = predictedDistance * calibrator.getScaleFactor() + calibrator.getShiftFactor();
-                Log.log(Level.INFO, "Ancora "+i+", distance: "+distance+", predicted distance: "+predictedDistance+"scaled predicted distance: "+scaledPredictedDistance+", XY:"+xyFromPoint[0]/640.0*1024.0+", "+xyFromPoint[1]/384.0*576.0);
+                Log.log(Level.INFO, "Ancora "+i+", distance: "+distance+", predicted distance: "+predictedDistance+", scaled predicted distance: "+scaledPredictedDistance+", XY:"+xyFromPoint[0]/640.0*1024.0+", "+xyFromPoint[1]/384.0*576.0);
             }
 
             objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());

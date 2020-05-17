@@ -168,26 +168,13 @@ public class PlaneRenderer {
         this.lowerDelta = lowerDelta;
     }
 
-    private float maxPredictedDistance;
-    private int maxPredictedDistanceUniform;
-
-    public void setMaxPredictedDistance(float maxPredictedDistance) {
-        this.maxPredictedDistance = maxPredictedDistance;
-    }
-
     private int plasmaEnabledUniform;
     private int plasmaTextureUniform;
-    private int plasmaFactorUniform;
-    private float plasmaFactor = Utils.PLASMA_FACTOR;
 
     private boolean plasmaEnabled = false;
 
     public void setPlasmaEnabled(boolean plasmaEnabled) {
         this.plasmaEnabled = plasmaEnabled;
-    }
-
-    public void setPlasmaFactor(float plasmaFactor) {
-        this.plasmaFactor = plasmaFactor;
     }
 
     private int timeUniform;
@@ -237,12 +224,7 @@ public class PlaneRenderer {
 
     private int maxDepthUniform;
     private float maxDepth;
-    private int squareMinimumEnabledUniform;
-    private boolean squareMinimumEnabled;
 
-    public void setSquareMinimumEnabled(boolean squareMinimumEnabled) {
-        this.squareMinimumEnabled = squareMinimumEnabled;
-    }
 
     public void setMaxDepth(float maxDepth) {
         this.maxDepth = maxDepth;
@@ -356,11 +338,9 @@ public class PlaneRenderer {
 
         upperDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_upperDelta");
         lowerDeltaUniform = GLES20.glGetUniformLocation(planeProgram, "u_lowerDelta");
-        maxPredictedDistanceUniform = GLES20.glGetUniformLocation(planeProgram, "u_maxPredictedDistance");
 
         plasmaTextureUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaTexture");
         plasmaEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaEnabled");
-        plasmaFactorUniform = GLES20.glGetUniformLocation(planeProgram, "u_plasmaFactor");
 
         timeUniform = GLES20.glGetUniformLocation(planeProgram, "u_time");
         rainEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_rainEnabled");
@@ -374,7 +354,6 @@ public class PlaneRenderer {
         cameraPoseUniform = GLES20.glGetUniformLocation(planeProgram, "u_cameraPose");
         screenOrientationUniform = GLES20.glGetUniformLocation(planeProgram, "u_screenOrientation");
 
-        squareMinimumEnabledUniform = GLES20.glGetUniformLocation(planeProgram, "u_squareMinimumEnabled");
         maxDepthUniform = GLES20.glGetUniformLocation(planeProgram, "u_maxDepth");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
@@ -588,11 +567,9 @@ public class PlaneRenderer {
         GLES20.glUniform1f(maskEnabledUniform, maskEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(screenOrientationUniform, screenOrientation);
-        GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
 
         GLES20.glUniform1f(upperDeltaUniform, upperDelta);
         GLES20.glUniform1f(lowerDeltaUniform, lowerDelta);
-        GLES20.glUniform1f(maxPredictedDistanceUniform, maxPredictedDistance);
 
         GLES20.glUniform1f(rainEnabledUniform, rainEnabled ? 1.0f : 0.0f);
         GLES20.glUniform1f(timeUniform, time);
@@ -606,7 +583,6 @@ public class PlaneRenderer {
         GLES20.glUniform3fv(cameraPoseUniform, 1, this.cameraPose, 0);
 
         GLES20.glUniform1f(maxDepthUniform, maxDepth);
-        GLES20.glUniform1f(squareMinimumEnabledUniform, squareMinimumEnabled ? 1.0f : 0.0f);
 
         // Shared fragment uniforms.
         GLES20.glUniform4fv(gridControlUniform, 1, GRID_CONTROL, 0);

@@ -296,40 +296,6 @@ public class Calibrator {
             this.scaleFactor = distance / predictedDistance;
         }
 
-        static Comparator<RansacObject> getComparatorByConfidence(){
-            return (a, b) -> {
-                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
-                if (a == null && b == null) {
-                    return 0;
-                }
-                if (a == null) {
-                    return 1;
-                }
-                if (b == null) {
-                    return -1;
-                }
-
-                return Double.compare(a.arConfidence, b.arConfidence);
-            };
-        }
-
-        static Comparator<RansacObject> getComparatorByError(){
-            return (a, b) -> {
-                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
-                if (a == null && b == null) {
-                    return 0;
-                }
-                if (a == null) {
-                    return 1;
-                }
-                if (b == null) {
-                    return -1;
-                }
-
-                return Double.compare(a.mse, b.mse);
-            };
-        }
-
         static Comparator<RansacObject> getComparatorByConfidenceInverse(){
             return (a, b) -> {
                 //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
@@ -344,23 +310,6 @@ public class Calibrator {
                 }
 
                 return Double.compare(b.arConfidence, a.arConfidence);
-            };
-        }
-
-        static Comparator<RansacObject> getComparatorByErrorInverse(){
-            return (a, b) -> {
-                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
-                if (a == null && b == null) {
-                    return 0;
-                }
-                if (a == null) {
-                    return 1;
-                }
-                if (b == null) {
-                    return -1;
-                }
-
-                return Double.compare(b.mse, a.mse);
             };
         }
     }
@@ -470,11 +419,11 @@ public class Calibrator {
         }
 
         //Salvo il nuovo valore.
-        if(Double.isNaN(migliorScaleFactorAverage)){
+        if(Double.isNaN(migliorScaleFactor)){
             Log.log(Level.INFO, "RANSAC calibrator failed");
             return false;
         }else{
-            scaleFactor = migliorScaleFactorAverage;
+            scaleFactor = migliorScaleFactor;
             shiftFactor = 0.0;
             numUsedPoints = migliorConsensusSet.length;
             return true;
@@ -499,13 +448,13 @@ public class Calibrator {
         //Check sul numero minimo di punti
         if(numPoints < 1) return false;
 
+        float arConfidenceAverage = 0.0f;
+
         RansacObject[] ransacObjects = new RansacObject[numPoints];
 
         //Calcolo di ogni singolo scaleFactor O(N)
         for (Point point : points){
             if(point == null) continue;
-
-            if(point.getConfidence() < 0.3f) continue;
 
             //Ricavo la distanza.
             double distance = getDistance(point);
@@ -520,6 +469,8 @@ public class Calibrator {
                 ransacObjects[numVisiblePoints].predictedDistance = predictedDistance;
                 ransacObjects[numVisiblePoints].arConfidence = point.getConfidence();
                 ransacObjects[numVisiblePoints].calculate();
+
+                arConfidenceAverage += point.getConfidence();
                 numVisiblePoints++;
             }else{
                 //Stranamente non riesco a trovare la predizione.
@@ -529,13 +480,24 @@ public class Calibrator {
 
         //Sorting per confidenza, decrescente: O(N*log2(N))
         //Non ho scelto parallel perché la lista degli elementi è limitata
-        //Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
+        Arrays.sort(ransacObjects, RansacObject.getComparatorByConfidenceInverse());
+
+        arConfidenceAverage /= numVisiblePoints;
+
+        int finalNumPoints = 0;
+
+        for (int i = 0; i < numVisiblePoints; i++) {
+            if(ransacObjects[i].arConfidence < arConfidenceAverage){
+                finalNumPoints = i+1;
+                break;
+            }
+        }
 
         //Sorting usato solo per applicare lo sbarramento
         //Applico sbarramento numero passimo punti
         //if(numVisiblePoints > MAX_POINTS) numVisiblePoints = MAX_POINTS;
 
-        ransacObjects = Arrays.copyOf(ransacObjects, numVisiblePoints);
+        ransacObjects = Arrays.copyOf(ransacObjects, finalNumPoints);
 
         return calibrateScaleFactorRANSAC(ransacObjects, numberOfIterations, normalizedThreshold);
     }
@@ -550,6 +512,23 @@ public class Calibrator {
         public void calculate(){
             this.predictedDistanceSquare = predictedDistance * predictedDistance;
             this.disparityDistance = 1.0 / distance;
+        }
+
+        static Comparator<MinimumSquareObject> getComparatorByConfidenceInverse(){
+            return (a, b) -> {
+                //Null check : https://stackoverflow.com/questions/14514467/sorting-array-with-null-values
+                if (a == null && b == null) {
+                    return 0;
+                }
+                if (a == null) {
+                    return 1;
+                }
+                if (b == null) {
+                    return -1;
+                }
+
+                return Double.compare(b.arConfidence, a.arConfidence);
+            };
         }
     }
 

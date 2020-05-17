@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 import java.util.logging.Logger;
 
 //https://github.com/google-ar/arcore-android-sdk/tree/master/samples/hello_ar_java/app/src/main/java/com/google/ar/core/examples/java/common/rendering
@@ -78,17 +77,11 @@ public class BackgroundRenderer {
     private int inferenceTextureUniform;
     private int plasmaEnabledUniform;
     private int plasmaTextureUniform;
-    private int plasmaFactorUniform;
 
     private boolean plasmaEnabled = false;
-    private float plasmaFactor = 1.0f;
 
     public void setPlasmaEnabled(boolean plasmaEnabled) {
         this.plasmaEnabled = plasmaEnabled;
-    }
-
-    public void setPlasmaFactor(float plasmaFactor) {
-        this.plasmaFactor = plasmaFactor;
     }
 
     private int scaleFactorUniform;
@@ -238,7 +231,6 @@ public class BackgroundRenderer {
         backgroundTextureUniform = GL30.glGetUniformLocation(program, "u_backgroundTexture");
 
         plasmaEnabledUniform = GL30.glGetUniformLocation(program, "u_plasmaEnabled");
-        plasmaFactorUniform = GL30.glGetUniformLocation(program, "u_plasmaFactor");
         plasmaTextureUniform = GL30.glGetUniformLocation(program, "u_plasmaTexture");
 
         scaleFactorUniform = GL30.glGetUniformLocation(program, "u_scaleFactor");
@@ -266,7 +258,6 @@ public class BackgroundRenderer {
         GL30.glUseProgram(program);
 
         GL30.glUniform1f(plasmaEnabledUniform, plasmaEnabled ? 1.0f : 0.0f);
-        GL30.glUniform1f(plasmaFactorUniform, plasmaFactor);
         GL30.glUniform1f(scaleFactorUniform, scaleFactor);
         GL30.glUniform1f(shiftFactorUniform, shiftFactor);
         GL30.glUniform1f(maxDepthUniform, maxDepth);

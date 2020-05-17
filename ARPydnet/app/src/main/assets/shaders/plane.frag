@@ -25,14 +25,11 @@ uniform vec2 u_rainResolution;
 uniform float u_time;
 
 uniform float u_maskEnabled;
-uniform float u_squareMinimumEnabled;
 
 uniform float u_upperDelta;
 uniform float u_lowerDelta;
-uniform float u_maxPredictedDistance;
 
 uniform float u_plasmaEnabled;
-uniform float u_plasmaFactor;
 
 uniform vec2 u_windowSize;
 
@@ -93,19 +90,7 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
         float predictedDistance =  (255.0 - inferenceVector.r);
 
-//        float predictedDistance =  inferenceVector.r;
-//        predictedDistance = predictedDistance / u_maxPredictedDistance;
-//        predictedDistance = 1.0 / predictedDistance;
-
         predictedDistance = predictedDistance * u_scaleFactor + u_shiftFactor;
-
-        //        if(u_squareMinimumEnabled > 0.5){
-        //            float disparityCap = 1.0 / u_maxDepth;
-        //            if(predictedDistance < disparityCap) predictedDistance = disparityCap;
-        //            predictedDistance = 1.0 / predictedDistance;
-        //        }else{
-        //            if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
-        //        }
 
         if(distance > predictedDistance + u_lowerDelta){
             discard;
@@ -174,16 +159,15 @@ void main() {
         vec4 inferenceVector = texture2D(u_inferenceTexture, texcoord);
 
         //Ricavo il valire di distanza e lo moltiplico per il fattore colore.
-        float inferenceValue = inferenceVector.r * u_plasmaFactor;
+        float predictedDistance = (255.0 - inferenceVector.r) * u_scaleFactor + u_shiftFactor;
 
-        //Normalizzazione.
-        if(inferenceValue < 0.0) inferenceValue = 0.0;
-        if(inferenceValue > 255.0) inferenceValue = 255.0;
-        inferenceValue = inferenceValue / 255.0;
+        if(predictedDistance < 0.0) predictedDistance = 0.0;
+        if(predictedDistance > u_maxDepth) predictedDistance = u_maxDepth;
+        predictedDistance = predictedDistance / u_maxDepth;
 
         //U: 0.0, 1.0, V: 0.0
         //Si tratta di una texture monodimensionale.
-        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(inferenceValue, 0.0));
+        vec4 plasmaVector = texture2D(u_plasmaTexture, vec2(predictedDistance * 2.5, 0.0));
 
         finalColor.rgb = finalColor.rgb * plasmaVector.rgb;
     }

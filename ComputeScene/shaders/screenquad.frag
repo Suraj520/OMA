@@ -20,7 +20,6 @@ uniform sampler2D u_backgroundTexture;
 uniform sampler2D u_inferenceTexture;
 uniform sampler2D u_plasmaTexture;
 uniform float u_plasmaEnabled;
-uniform float u_plasmaFactor;
 uniform float u_scaleFactor;
 uniform float u_shiftFactor;
 uniform float u_maxDepth;

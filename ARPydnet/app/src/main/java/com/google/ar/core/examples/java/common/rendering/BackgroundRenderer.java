@@ -80,12 +80,28 @@ public class BackgroundRenderer {
 
     //Riferimento all'abilitatore della maschera.
     private int plasmaEnabledUniform;
-    private int plasmaFactorUniform;
+    private boolean plasmaEnabled = false;
+    private int scaleFactorUniform;
+    private float scaleFactor;
+    private int shiftFactorUniform;
+    private float shiftFactor;
+    private int maxDepthUniform;
+    private float maxDepth;
 
-    private float plasmaFactor = Utils.PLASMA_FACTOR;
+    public void setPlasmaEnabled(boolean plasmaEnabled) {
+        this.plasmaEnabled = plasmaEnabled;
+    }
 
-    public void setPlasmaFactor(float plasmaFactor) {
-        this.plasmaFactor = plasmaFactor;
+    public void setScaleFactor(float scaleFactor) {
+        this.scaleFactor = scaleFactor;
+    }
+
+    public void setMaxDepth(float maxDepth) {
+        this.maxDepth = maxDepth;
+    }
+
+    public void setShiftFactor(float shiftFactor) {
+        this.shiftFactor = shiftFactor;
     }
 
     //Riferimento alla posizione dello sfondo e della relativa maschera.
@@ -115,15 +131,6 @@ public class BackgroundRenderer {
         return textures[3];
     }
 
-    private boolean plasmaEnabled = false;
-
-    public boolean isPlasmaEnabled() {
-        return plasmaEnabled;
-    }
-
-    public void setPlasmaEnabled(boolean plasmaEnabled) {
-        this.plasmaEnabled = plasmaEnabled;
-    }
 
     private int[] frameBuffers = new int[1];
 
@@ -279,7 +286,9 @@ public class BackgroundRenderer {
         inferenceTextureUniform = GLES20.glGetUniformLocation(program, "u_inferenceTexture");
 
         plasmaEnabledUniform = GLES20.glGetUniformLocation(program, "u_plasmaEnabled");
-        plasmaFactorUniform = GLES20.glGetUniformLocation(program, "u_plasmaFactor");
+        scaleFactorUniform = GLES20.glGetUniformLocation(program, "u_scaleFactor");
+        shiftFactorUniform = GLES20.glGetUniformLocation(program, "u_shiftFactor");
+        maxDepthUniform = GLES20.glGetUniformLocation(program, "u_maxDepth");
 
         ShaderUtil.checkGLError(TAG, "Program parameters");
     }
@@ -324,7 +333,7 @@ public class BackgroundRenderer {
      * BackgroundRenderer#backgroundTexCoordsBuffer} image texture coordinates.
      */
     private void draw() {
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 0");
+        ShaderUtil.checkGLError(TAG, "BackgroundRenderer Before Draw");
 
         // Ensure position is rewound before use.
         backgroundTexCoordsBuffer.position(0);
@@ -337,10 +346,9 @@ public class BackgroundRenderer {
 
         GLES20.glUseProgram(program);
 
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 1");
-
-        //Binding color factor
-        GLES20.glUniform1f(plasmaFactorUniform, plasmaFactor);
+        GLES20.glUniform1f(scaleFactorUniform, scaleFactor);
+        GLES20.glUniform1f(shiftFactorUniform, shiftFactor);
+        GLES20.glUniform1f(maxDepthUniform, maxDepth);
 
         //Binding delle texture
         GLES20.glUniform1i(inferenceTextureUniform, 0);
@@ -355,8 +363,6 @@ public class BackgroundRenderer {
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, getBackgroundTextureId());
-
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw 2");
 
         // Set the vertex positions.
         GLES20.glVertexAttribPointer(
@@ -397,8 +403,8 @@ public class BackgroundRenderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+//        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+//        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
@@ -410,7 +416,7 @@ public class BackgroundRenderer {
         GLES20.glDepthMask(true);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
 
-        ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw");
+        ShaderUtil.checkGLError(TAG, "BackgroundRenderer After Draw");
     }
 
     //https://community.khronos.org/t/loading-and-reading-a-floating-point-texture/63360
