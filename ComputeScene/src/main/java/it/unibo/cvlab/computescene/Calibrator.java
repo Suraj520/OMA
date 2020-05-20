@@ -14,7 +14,7 @@ import it.unibo.cvlab.computescene.dataset.Pose;
 public class Calibrator {
 
     private final static String TAG = Calibrator.class.getSimpleName();
-    private final static Logger Log = Logger.getLogger(Calibrator.class.getSimpleName());
+    private final static Logger Log = Logger.getLogger(TAG);
 
     private static final float MAPPER_SCALE_FACTOR = 0.2f;
 
@@ -267,8 +267,10 @@ public class Calibrator {
             }
         }
 
-        if (!Double.isNaN(sumScaleFactor)) {
-            scaleFactor = sumScaleFactor / sumWeight;
+        double tmpScaleFactor = sumScaleFactor / sumWeight;
+
+        if (Double.isFinite(tmpScaleFactor)) {
+            scaleFactor = tmpScaleFactor;
             shiftFactor = 0.0;
             numUsedPoints = numVisiblePoints;
             Log.log(Level.INFO, "Scale factor: "+scaleFactor);
@@ -419,11 +421,11 @@ public class Calibrator {
         }
 
         //Salvo il nuovo valore.
-        if(Double.isNaN(migliorScaleFactor)){
+        if(!Double.isFinite(migliorScaleFactorAverage)){
             Log.log(Level.INFO, "RANSAC calibrator failed");
             return false;
         }else{
-            scaleFactor = migliorScaleFactor;
+            scaleFactor = migliorScaleFactorAverage;
             shiftFactor = 0.0;
             numUsedPoints = migliorConsensusSet.length;
             return true;
@@ -568,7 +570,7 @@ public class Calibrator {
             double shift = (-a01*b0+a00*b1)/detA;
 
             //Salvo il nuovo valore.
-            if(Double.isNaN(scaleFactor) || Double.isNaN(shift)){
+            if(!Double.isFinite(scaleFactor) || !Double.isFinite(shift)){
                 Log.log(Level.INFO, "Minimum square calibrator failed");
                 return false;
             }else{

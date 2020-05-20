@@ -30,7 +30,9 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -71,6 +73,10 @@ public class ComputeScene {
 
     private float maxDepth = 10.0f;
 
+    private double lastScaleFactor = Double.NaN;
+
+    private List<Double> scaleFactors = new ArrayList<>();
+
     public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC, boolean attivaDepth) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
@@ -110,6 +116,26 @@ public class ComputeScene {
         System.out.println("Hello LWJGL " + Version.getVersion() + "!");
         init();
         loop();
+
+        Double[] scaleFactors = this.scaleFactors.toArray(new Double[0]);
+
+        double mediaScaleFactor = 0.0;
+
+        for (int i = 0; i < scaleFactors.length; i++) {
+            mediaScaleFactor += scaleFactors[i];
+        }
+
+        mediaScaleFactor /= scaleFactors.length;
+
+        double varianzaScaleFactor = 0.0;
+
+        for (int i = 0; i < scaleFactors.length; i++) {
+            varianzaScaleFactor += Math.pow(scaleFactors[i] - mediaScaleFactor, 2);
+        }
+
+        varianzaScaleFactor /= scaleFactors.length;
+
+        Log.log(Level.INFO, "Media: "+mediaScaleFactor+", Varianza: "+varianzaScaleFactor);
 
         try {
             colorMapper.dispose();
@@ -346,13 +372,29 @@ public class ComputeScene {
 
         Pose[] ancore = sceneDataset.getAncore();
 
-        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints())){
+        boolean squareMinimumFailed = false;
+        boolean ransacFailed = false;
+        boolean weightedAverageFailed = false;
+
+        if((squareMinimumFailed = !calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints()))){
             //Calibratore Quadrati minimi fallito: uso RANSAC
-            if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f)){
+            if(ransacFailed = !calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f)){
                 //Calibrazione con RANSAC fallita: provo con media ponderata
-                calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+                weightedAverageFailed = !calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
             }
         }
+
+        double tmpScaleFactor = calibrator.getScaleFactor();
+
+        if(!Double.isFinite(lastScaleFactor)){
+            lastScaleFactor = tmpScaleFactor;
+        }else{
+            tmpScaleFactor = lastScaleFactor * 0.4 + tmpScaleFactor * 0.6;
+            calibrator.setScaleFactor(tmpScaleFactor);
+            lastScaleFactor = tmpScaleFactor;
+        }
+
+        scaleFactors.add(calibrator.getScaleFactor());
 
         Log.log(Level.INFO, "SF: "+calibrator.getScaleFactor() + ", SHIFT:"+calibrator.getShiftFactor()+", NUP: "+calibrator.getNumUsedPoints() + ", NVP: "+calibrator.getNumVisiblePoints());
 

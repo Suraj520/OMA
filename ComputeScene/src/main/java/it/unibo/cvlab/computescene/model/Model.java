@@ -113,10 +113,13 @@ public class Model {
 
         float range = max - min;
 
+//        float divisor = range / 8;
+
         in.rewind();
 
         while(in.hasRemaining()){
             float pred = in.get();
+//            out.put((int)((range * (1f-((pred-min)/range)))/divisor)*divisor);
             out.put(range * (1f-((pred-min)/range)));
         }
 
