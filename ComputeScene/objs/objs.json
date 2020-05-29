@@ -1,23 +1,38 @@
 [
 	{
+		"name":"wolfSit",
+		"objs":["wolf_sit/wolf_000001.obj","wolf_sit/wolf_000002.obj","wolf_sit/wolf_000003.obj","wolf_sit/wolf_000004.obj","wolf_sit/wolf_000005.obj","wolf_sit/wolf_000006.obj","wolf_sit/wolf_000007.obj","wolf_sit/wolf_000008.obj","wolf_sit/wolf_000009.obj","wolf_sit/wolf_000010.obj","wolf_sit/wolf_000011.obj","wolf_sit/wolf_000012.obj","wolf_sit/wolf_000013.obj","wolf_sit/wolf_000014.obj","wolf_sit/wolf_000015.obj","wolf_sit/wolf_000016.obj","wolf_sit/wolf_000017.obj"],
+		"texture":"wolf.png",
+		"scaleFactor":1.0,
+		"delta":0.00,
+		"animation": true,
+		"animationMode":"pingPong"
+	},
+	{
 		"name":"duck",
-		"obj":"rubber_duck.obj",
+		"objs":["rubber_duck.obj"],
 		"texture":"rubber_duck.png",
 		"scaleFactor":0.15,
-		"delta":0.00
+		"delta":0.00,
+		"animation": false,
+		"animationMode":"none"
 	},
 	{
 		"name":"cat",
-		"obj":"cat.obj",
+		"objs":["cat.obj"],
 		"texture":"cat.png",
 		"scaleFactor":0.09,
-		"delta":0.00
+		"delta":0.00,
+		"animation": false,
+		"animationMode":"none"
 	},
 	{
 		"name":"barrel",
-		"obj":"objBarrel.obj",
+		"objs":["objBarrel.obj"],
 		"texture":"wood.png",
 		"scaleFactor":0.08,
-		"delta":0.00
+		"delta":0.00,
+		"animation": false,
+		"animationMode":"none"
 	}
 ]

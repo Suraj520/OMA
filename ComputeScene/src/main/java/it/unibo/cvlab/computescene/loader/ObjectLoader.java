@@ -9,13 +9,11 @@ import de.javagl.obj.ObjReader;
 import de.javagl.obj.ObjUtils;
 import de.matthiasmann.twl.utils.PNGDecoder;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.function.Function;
 
 public class ObjectLoader {
     private static Path defaultObjsPath = Paths.get("objs").toAbsolutePath().resolve("objs.json");
@@ -26,14 +24,25 @@ public class ObjectLoader {
         gson = builder.create();
     }
 
+    public enum AnimationMode{
+        @SerializedName("none")
+        NONE,
+        @SerializedName("repeat")
+        REPEAT,
+        @SerializedName("stopAtEnd")
+        STOP_AT_END,
+        @SerializedName("pingPong")
+        PING_PONG,;
+    }
+
     public static class Object {
         @Expose
         @SerializedName("name")
         private String name;
 
         @Expose
-        @SerializedName("obj")
-        private String objName;
+        @SerializedName("objs")
+        private String[] objsName;
 
         @Expose
         @SerializedName("texture")
@@ -47,12 +56,27 @@ public class ObjectLoader {
         @SerializedName("delta")
         private float delta;
 
-        private Obj obj;
-        private PNGDecoder texture;
+        @Expose
+        @SerializedName("animation")
+        private boolean animation;
 
-        public Object(String name, String objName, String textureName, float scaleFactor, float delta) {
+        @Expose
+        @SerializedName("animationMode")
+        private AnimationMode animationMode;
+
+        private ObjectLoader objLoader;
+        private Obj[] objs;
+        private PNGDecoder textureDecoder;
+
+        private ByteBuffer textureBuffer;
+        private int textureWidth, textureHeight;
+
+        private int objCounter = 0;
+        private boolean pingPong = true;
+
+        public Object(String name, String[] objName, String textureName, float scaleFactor, float delta) {
             this.name = name;
-            this.objName = objName;
+            this.objsName = objsName;
             this.textureName = textureName;
             this.scaleFactor = scaleFactor;
             this.delta = delta;
@@ -62,8 +86,16 @@ public class ObjectLoader {
             return name;
         }
 
-        public String getObjName() {
-            return objName;
+        public String[] getObjsName() {
+            return objsName;
+        }
+
+        public int getNumberOfObjs(){
+            return objsName.length;
+        }
+
+        public AnimationMode getAnimationMode() {
+            return animationMode;
         }
 
         public String getTextureName() {
@@ -78,20 +110,105 @@ public class ObjectLoader {
             return delta;
         }
 
-        public Obj getObj() {
-            return obj;
+        public boolean isAnimation() {
+            return animation;
         }
 
-        public PNGDecoder getTexture() {
-            return texture;
+        public Obj getNextObj() throws IOException {
+            if(objs == null){
+                objs = new Obj[objsName.length];
+            }
+
+            if(objs[objCounter] == null){
+                objs[objCounter] = objLoader.getObj(this);
+            }
+
+            Obj result = objs[objCounter];
+            incrementCounter();
+            return result;
         }
 
-        private void setObj(Obj obj) {
-            this.obj = obj;
+        private void decodeTexture() throws IOException {
+            textureDecoder = objLoader.getTextureDecoder(this);
+
+            //https://stackoverflow.com/questions/41901468/load-a-texture-within-opengl-and-lwjgl3-in-java/41902221
+            //create a byte buffer big enough to store RGBA values
+            textureBuffer = ByteBuffer.allocateDirect(4 * textureDecoder.getWidth() * textureDecoder.getHeight());
+            //decode
+            textureDecoder.decode(textureBuffer, textureDecoder.getWidth() * 4, PNGDecoder.Format.RGBA);
+            //flip the buffer so its ready to read
+            textureBuffer.flip();
+
+            textureWidth = textureDecoder.getWidth();
+            textureHeight = textureDecoder.getHeight();
         }
 
-        private void setTexture(PNGDecoder texture) {
-            this.texture = texture;
+        public ByteBuffer getTexture() throws IOException {
+            if(textureDecoder == null){
+                decodeTexture();
+            }
+
+            return textureBuffer;
+        }
+
+        public int getTextureHeight() throws IOException {
+            if(textureDecoder == null){
+                decodeTexture();
+            }
+
+            return textureHeight;
+        }
+
+        public int getTextureWidth() throws IOException {
+            if(textureDecoder == null){
+                decodeTexture();
+            }
+
+            return textureWidth;
+        }
+
+        public int getObjCounter() {
+            return objCounter;
+        }
+
+        private void incrementCounter(){
+            //Solo per animaizoni
+            if(!animation) return;
+
+            //Switch sul modo di animazione
+            switch (animationMode){
+                case REPEAT://0,1,2,3,0,1,2,3,..
+                    if(objCounter + 1 < objsName.length){
+                        objCounter++;
+                    }else{
+                        objCounter = 0;
+                    }
+                    return;
+                case PING_PONG://0,1,2,3,3,2,1,0,0,1,...
+                    if(pingPong){
+                        if(objCounter + 1 < objsName.length){
+                            objCounter++;
+                        }else{
+                            pingPong = !pingPong;
+                        }
+                    }else {
+                        if(objCounter - 1 >= 0){
+                            objCounter--;
+                        }else{
+                            pingPong = !pingPong;
+                        }
+                    }
+                    return;
+                case STOP_AT_END://0,1,2,3
+                    if(objCounter + 1 < objsName.length){
+                        objCounter++;
+                    }
+                    return;
+                case NONE://0
+                default:
+                    objCounter = 0;
+                    return;
+            }
         }
     }
 
@@ -122,15 +239,16 @@ public class ObjectLoader {
 
         Object[] objects = gson.fromJson(Files.newBufferedReader(objsPath), Object[].class);
 
-        for (Object object: objects) {
-            object.setObj(getObj(object));
-            object.setTexture(getTexture(object));
+        for(Object object : objects){
+            object.objLoader = this;
         }
+
         return objects;
     }
 
     private Obj getObj(Object object) throws IOException {
-        Path objPath = objsDirPath.resolve(object.getObjName());
+        Path objPath = objsDirPath.resolve(object.objsName[object.objCounter]);
+
         if(Files.exists(objPath)){
             Obj obj = ObjReader.read(Files.newInputStream(objPath));
             obj = ObjUtils.convertToRenderable(obj);
@@ -139,7 +257,7 @@ public class ObjectLoader {
         throw new IllegalArgumentException("Obj path non presente nel set");
     }
 
-    private PNGDecoder getTexture(Object object) throws IOException {
+    private PNGDecoder getTextureDecoder(Object object) throws IOException {
         Path texturePath = objsDirPath.resolve(object.getTextureName());
         if(Files.exists(texturePath)){
             PNGDecoder decoder = new PNGDecoder(Files.newInputStream(texturePath));

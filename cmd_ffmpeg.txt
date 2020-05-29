@@ -13,3 +13,8 @@
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\16052020_141313\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 16052020_141313_oma_ransac.avi
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\16052020_141313\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 16052020_141313_oma_average.avi
  .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\16052020_141313\results\PydnetV3\noOma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 16052020_141313_nooma.avi 
+ 
+ 
+ 
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\20052020_002036\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 20052020_002036_oma_depth.avi
+ .\ffmpeg.exe -f image2 -i C:\Users\bartn\Desktop\OMA\datasets\20052020_122836\results\PydnetV3\oma\%d.jpg -qscale:v 5 -vf "setpts=2*PTS" 20052020_122836_oma_depth.avi

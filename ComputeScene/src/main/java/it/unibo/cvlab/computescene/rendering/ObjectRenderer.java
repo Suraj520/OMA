@@ -3,19 +3,18 @@ package it.unibo.cvlab.computescene.rendering;
 import android.opengl.Matrix;
 import de.javagl.obj.Obj;
 import de.javagl.obj.ObjData;
-import de.matthiasmann.twl.utils.PNGDecoder;
 import it.unibo.cvlab.computescene.Utils;
 import it.unibo.cvlab.computescene.dataset.Pose;
+import it.unibo.cvlab.computescene.loader.ObjectLoader;
 import org.lwjgl.opengl.GL30;
 
 import java.io.IOException;
 import java.nio.*;
-import java.util.logging.Logger;
 
 /** Renders an object loaded from an OBJ file in OpenGL. */
 public class ObjectRenderer {
     private static final String TAG = ObjectRenderer.class.getSimpleName();
-    private final static Logger Log = Logger.getLogger(ObjectRenderer.class.getSimpleName());
+//    private final static Logger Log = Logger.getLogger(TAG);
 
     public static final float DEFAULT_LOWER_DELTA = 0.00f;
     public static final float DEFAULT_OBJ_SCALE_FACTOR = 1.0f;
@@ -65,7 +64,7 @@ public class ObjectRenderer {
     private int colorUniform;
 
     // Temporary matrices allocated here to reduce number of allocations for each frame.
-    private float[] modelMatrix = new float[16];
+    private final float[] modelMatrix = new float[16];
     private final float[] modelViewMatrix = new float[16];
     private final float[] modelViewProjectionMatrix = new float[16];
 
@@ -123,10 +122,10 @@ public class ObjectRenderer {
     }
 
     private int windowSizeUniform;
-    private int[] screenData = new int[4];
+    private final int[] screenData = new int[4];
 
     private int cameraPoseUniform;
-    private float[] cameraPose = new float[3];
+    private final float[] cameraPose = new float[3];
 
     public void setCameraPose(Pose cameraPose){
         this.cameraPose[0] = cameraPose.getTx();
@@ -139,7 +138,7 @@ public class ObjectRenderer {
     /**
      * Creates and initializes OpenGL resources needed for rendering the model.
      */
-    public void createOnGlThread(Obj obj, PNGDecoder textureImage)
+    public void createOnGlThread()
             throws IOException {
         final int vertexShader =
                 ShaderUtil.loadGLShader(TAG, GL30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
@@ -194,14 +193,6 @@ public class ObjectRenderer {
 
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
 
-        loadTextureImage(textureImage);
-
-        GL30.glActiveTexture(GL30.GL_TEXTURE0);
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, getTextureId());
-        GL30.glGenerateMipmap(GL30.GL_TEXTURE_2D);
-
-        GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
-
         //Init custom textures
         GL30.glActiveTexture(GL30.GL_TEXTURE1);
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, getInferenceTextureId());
@@ -229,6 +220,18 @@ public class ObjectRenderer {
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
 
         ShaderUtil.checkGLError(TAG, "Texture loading");
+
+
+    }
+
+    public void loader(ObjectLoader.Object object) throws IOException {
+        Obj obj = object.getNextObj();
+
+        ByteBuffer buffer = object.getTexture();
+        int textureWidth = object.getTextureWidth();
+        int textureHeight = object.getTextureHeight();
+
+        loadTextureImage(buffer, textureWidth, textureHeight, true);
 
         // OpenGL does not use Java arrays. ByteBuffers are used instead to provide data in a format
         // that OpenGL understands.
@@ -276,7 +279,6 @@ public class ObjectRenderer {
 
         Matrix.setIdentityM(modelMatrix, 0);
     }
-
 
     /**
      * Updates the object model matrix and applies scaling.
@@ -412,44 +414,31 @@ public class ObjectRenderer {
         GL30.glBindTexture(GL30.GL_TEXTURE_2D, 0);
     }
 
-
-
-    public void loadTextureImage(PNGDecoder textureImage) throws IOException {
-        loadTexture(textureImage, getTextureId(), GL30.GL_TEXTURE0);
+    public void loadTextureImage(ByteBuffer buffer, int width, int height, boolean genMipmap) throws IOException {
+        loadTexture(buffer, width, height, getTextureId(), GL30.GL_TEXTURE0, genMipmap);
     }
 
     /**
      * Carica un immagine in una texture openGL.
      *
-     * @param decoder immagine PNG
+     * @param buffer immagine RGBA
+     * @param width lunghezza immagine
+     * @param height altezza immagine
      * @param textureId bind della texture openGL
      * @param activeTexture bind della texture attiva openGL
+     * @param genMipmap vero se si vuole generare le mipmap
      */
-    private void loadTexture(PNGDecoder decoder, int textureId, int activeTexture) throws IOException {
-        int textureTarget = GL30.GL_TEXTURE_2D;
-
+    private void loadTexture(ByteBuffer buffer, int width, int height, int textureId, int activeTexture, boolean genMipmap) throws IOException {
         GL30.glActiveTexture(activeTexture);
-        GL30.glBindTexture(textureTarget, textureId);
+        GL30.glBindTexture( GL30.GL_TEXTURE_2D, textureId);
 
-        //non si capisce se RGBA o ARGB
-        //Lo caccio così
-        //Altrimenti nello shader inverto i colori.
-        //int[] rgb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, width, height, 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, buffer);
 
-        //https://stackoverflow.com/questions/41901468/load-a-texture-within-opengl-and-lwjgl3-in-java/41902221
+        if(genMipmap){
+            GL30.glGenerateMipmap(GL30.GL_TEXTURE_2D);
+        }
 
-        //create a byte buffer big enough to store RGBA values
-        ByteBuffer buffer = ByteBuffer.allocateDirect(4 * decoder.getWidth() * decoder.getHeight());
-
-        //decode
-        decoder.decode(buffer, decoder.getWidth() * 4, PNGDecoder.Format.RGBA);
-
-        //flip the buffer so its ready to read
-        buffer.flip();
-
-        GL30.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA, decoder.getWidth(), decoder.getHeight(), 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, buffer);
-
-        GL30.glBindTexture(textureTarget, 0);
+        GL30.glBindTexture( GL30.GL_TEXTURE_2D, 0);
 
         ShaderUtil.checkGLError(TAG, "texture loading");
     }

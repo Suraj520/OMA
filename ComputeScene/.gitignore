@@ -1,3 +1,8 @@
 /.gradle/
 /gradle/
 /build/
+/models/frozen_dsnet.pb
+/models/frozen_dsnetv2.pb
+/models/frozen_dsnetv3.pb
+/models/frozen_pydnet_v2.pb
+/models/frozen_pydnet_v3.pb

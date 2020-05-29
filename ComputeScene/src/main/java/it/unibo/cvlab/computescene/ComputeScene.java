@@ -40,7 +40,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 
 public class ComputeScene {
     private static final String TAG = ComputeScene.class.getSimpleName();
-    private final static Logger Log = Logger.getLogger(ComputeScene.class.getSimpleName());
+    private final static Logger Log = Logger.getLogger(TAG);
 
     private static final String WINDOW_TITLE = "Compute Scene";
 
@@ -52,35 +52,31 @@ public class ComputeScene {
     private final ScreenshotRenderer screenshotRenderer = new ScreenshotRenderer();
     private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
     private final ScreenshotRenderer inferenceRenderer = new ScreenshotRenderer();
-
-    private ObjectRenderer[] objectRenderers;
+    private final ObjectRenderer objectRenderer = new ObjectRenderer();
 
     private final Calibrator calibrator = new Calibrator();
 
-    private DatasetLoader datasetLoader;
-    private ObjectLoader.Object[] objects;
-    private MySaver saver;
-    private Model model;
+    private final DatasetLoader datasetLoader;
+    private final ObjectLoader.Object[] objects;
+    private final MySaver saver;
+    private final Model model;
 
 
     private float[] inferenceArray;
-    private ScreenshotRenderer.ColorType colorType;
+    private final ScreenshotRenderer.ColorType colorType;
 
-    private ColorMapper colorMapper;
-    private boolean attivaOMA;
-    private boolean attivaRPC;
-    private boolean attivaDepth;
-
-    private float maxDepth = 10.0f;
+    private final ColorMapper colorMapper;
+    private final boolean attivaOMA;
+    private final boolean attivaRPC;
+    private final boolean attivaDepth;
 
     private double lastScaleFactor = Double.NaN;
 
-    private List<Double> scaleFactors = new ArrayList<>();
+    private final List<Double> scaleFactors = new ArrayList<>();
 
     public ComputeScene(DatasetLoader datasetLoader, ObjectLoader.Object[] objects, MySaver saver, Model model, ScreenshotRenderer.ColorType colorType, boolean attivaOMA, boolean attivaRPC, boolean attivaDepth) {
         this.datasetLoader = datasetLoader;
         this.objects = objects;
-        this.objectRenderers = new ObjectRenderer[objects.length];
         this.saver = saver;
         this.model = model;
         this.colorType = colorType;
@@ -88,13 +84,6 @@ public class ComputeScene {
         this.attivaOMA = attivaOMA;
         this.attivaRPC = attivaRPC;
         this.attivaDepth = attivaDepth;
-
-        //Inizializzazione rendering oggetti: imposto già il delta e lo scale factor dell'oggetto.
-        for (int i = 0; i < objects.length; i++) {
-            objectRenderers[i] = new ObjectRenderer();
-            objectRenderers[i].setObjScaleFactor(objects[i].getScaleFactor());
-            objectRenderers[i].setLowerDelta(objects[i].getDelta());
-        }
     }
 
     public void load() throws IOException {
@@ -121,16 +110,16 @@ public class ComputeScene {
 
         double mediaScaleFactor = 0.0;
 
-        for (int i = 0; i < scaleFactors.length; i++) {
-            mediaScaleFactor += scaleFactors[i];
+        for (Double scaleFactor : scaleFactors) {
+            mediaScaleFactor += scaleFactor;
         }
 
         mediaScaleFactor /= scaleFactors.length;
 
         double varianzaScaleFactor = 0.0;
 
-        for (int i = 0; i < scaleFactors.length; i++) {
-            varianzaScaleFactor += Math.pow(scaleFactors[i] - mediaScaleFactor, 2);
+        for (Double scaleFactor : scaleFactors) {
+            varianzaScaleFactor += Math.pow(scaleFactor - mediaScaleFactor, 2);
         }
 
         varianzaScaleFactor /= scaleFactors.length;
@@ -190,6 +179,10 @@ public class ComputeScene {
             // Get the resolution of the primary monitor
             GLFWVidMode vidmode = GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor());
 
+            if(vidmode == null){
+                throw new RuntimeException("Failed to create the GLFW vidmode");
+            }
+
             // Center the window
             GLFW.glfwSetWindowPos(
                     window,
@@ -237,7 +230,7 @@ public class ComputeScene {
 
 
             } catch (IOException e) {
-                Log.log(Level.SEVERE, "Impossibile eseguire draw: "+e.getLocalizedMessage());
+                Log.log(Level.SEVERE, "Impossibile eseguire draw.", e);
             }
 
             if(datasetLoader.hasNext()){
@@ -264,10 +257,7 @@ public class ComputeScene {
             screenshotRenderer.createOnGlThread(ScreenshotRenderer.ColorType.RGBA8, surfaceWidth, surfaceHeight, surfaceWidth, surfaceHeight);
             inferenceRenderer.createOnGlThread(colorType, surfaceWidth, surfaceHeight, model.getInputWidth(), model.getInputHeight());
             pointCloudRenderer.createOnGlThread();
-
-            for (int i = 0; i < objectRenderers.length; i++) {
-                objectRenderers[i].createOnGlThread(objects[i].getObj(), objects[i].getTexture());
-            }
+            objectRenderer.createOnGlThread();
         } catch (IOException e) {
             Log.log(Level.SEVERE, "Impossibile caricare shaders: "+e.getLocalizedMessage());
         }
@@ -283,18 +273,22 @@ public class ComputeScene {
         //Disegno lo sfondo.
         backgroundRenderer.draw();
 
-        for (int i = 0; i < objectRenderers.length; i++) {
-            objectRenderers[i].setMaskEnabled(false);
-            objectRenderers[i].setCameraPose(sceneDataset.getCameraPose());
-        }
+        objectRenderer.setMaskEnabled(false);
+        objectRenderer.setCameraPose(sceneDataset.getCameraPose());
 
         Pose[] ancore = sceneDataset.getAncore();
 
         int i = 0;
 
         for (Pose ancora : ancore){
-            objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
-            objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            //Impostazione oggetto corrente
+            objectRenderer.setObjScaleFactor(objects[i % objects.length].getScaleFactor());
+            objectRenderer.setLowerDelta(objects[i % objects.length].getDelta());
+            //Caricamento dell'oggetto.
+            objectRenderer.loader(objects[i % objects.length]);
+
+            objectRenderer.updateModelMatrix(ancora.getModelMatrix());
+            objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;
         }
 
@@ -312,7 +306,7 @@ public class ComputeScene {
     private void drawOMA(BufferedImage backgroudImage, SceneDataset sceneDataset, PointCloudDataset pointDataset, long currentFrame) throws IOException {
         System.out.println("Frame corrente:"+currentFrame);
 
-        this.maxDepth = sceneDataset.getFarPlane();
+        float maxDepth = sceneDataset.getFarPlane();
         backgroundRenderer.setPlasmaEnabled(false);
 
         //Binding dell'inference renderer
@@ -360,39 +354,32 @@ public class ComputeScene {
         BufferedImage colorMap = colorMapper.getColorMap(inference, 4);
         saver.saveDepth(currentFrame, colorMap);
 
-        for (int i = 0; i < objectRenderers.length; i++) {
-            objectRenderers[i].setPlasmaEnabled(attivaDepth);
-            objectRenderers[i].setMaxDepth(maxDepth);
-            objectRenderers[i].loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
-            objectRenderers[i].setMaskEnabled(true);
-            objectRenderers[i].setCameraPose(sceneDataset.getCameraPose());
-        }
+        objectRenderer.setPlasmaEnabled(attivaDepth);
+        objectRenderer.setMaxDepth(maxDepth);
+        objectRenderer.loadInference(inferenceArray, model.getOutputWidth(), model.getOutputHeight());
+        objectRenderer.setMaskEnabled(true);
+        objectRenderer.setCameraPose(sceneDataset.getCameraPose());
 
         //Faccio il rendering degli oggetti.
 
         Pose[] ancore = sceneDataset.getAncore();
 
-        boolean squareMinimumFailed = false;
-        boolean ransacFailed = false;
-        boolean weightedAverageFailed = false;
-
-        if((squareMinimumFailed = !calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints()))){
+        if(!calibrator.calibrateScaleFactorQuadratiMinimi(inference, pointDataset.getPoints())){
             //Calibratore Quadrati minimi fallito: uso RANSAC
-            if(ransacFailed = !calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f)){
+            if(!calibrator.calibrateScaleFactorRANSAC(inference, pointDataset.getPoints(), 10, 0.1f)){
                 //Calibrazione con RANSAC fallita: provo con media ponderata
-                weightedAverageFailed = !calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
+                calibrator.calibrateScaleFactor(inference, pointDataset.getPoints());
             }
         }
 
         double tmpScaleFactor = calibrator.getScaleFactor();
 
-        if(!Double.isFinite(lastScaleFactor)){
-            lastScaleFactor = tmpScaleFactor;
-        }else{
+        if (Double.isFinite(lastScaleFactor)) {
             tmpScaleFactor = lastScaleFactor * 0.4 + tmpScaleFactor * 0.6;
             calibrator.setScaleFactor(tmpScaleFactor);
-            lastScaleFactor = tmpScaleFactor;
         }
+
+        lastScaleFactor = tmpScaleFactor;
 
         scaleFactors.add(calibrator.getScaleFactor());
 
@@ -421,10 +408,16 @@ public class ComputeScene {
                 Log.log(Level.INFO, "Ancora "+i+", distance: "+distance+", predicted distance: "+predictedDistance+", scaled predicted distance: "+scaledPredictedDistance+", XY:"+xyFromPoint[0]/640.0*1024.0+", "+xyFromPoint[1]/384.0*576.0);
             }
 
-            objectRenderers[i % objectRenderers.length].setScaleFactor((float) calibrator.getScaleFactor());
-            objectRenderers[i % objectRenderers.length].setShiftFactor((float) calibrator.getShiftFactor());
-            objectRenderers[i % objectRenderers.length].updateModelMatrix(ancora.getModelMatrix());
-            objectRenderers[i % objectRenderers.length].draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
+            //Impostazione oggetto corrente
+            objectRenderer.setObjScaleFactor(objects[i % objects.length].getScaleFactor());
+            objectRenderer.setLowerDelta(objects[i % objects.length].getDelta());
+            //Caricamento dell'oggetto.
+            objectRenderer.loader(objects[i % objects.length]);
+
+            objectRenderer.setScaleFactor((float) calibrator.getScaleFactor());
+            objectRenderer.setShiftFactor((float) calibrator.getShiftFactor());
+            objectRenderer.updateModelMatrix(ancora.getModelMatrix());
+            objectRenderer.draw(sceneDataset.getViewmtx(), sceneDataset.getProjmtx());
             i++;
         }
 
@@ -446,7 +439,7 @@ public class ComputeScene {
             i++;
         }
 
-        int scelta = 0;
+        int scelta;
 
         do {
             String tmp = inReader.readLine();
